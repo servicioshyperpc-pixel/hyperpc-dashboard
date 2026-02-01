@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { useDashboardStore } from '../../store/useDashboardStore';
 import { Card } from '../../core/components/Card.tsx';
 import { Badge } from '../../core/components/Badge.tsx';
+import { DatePicker } from '../../core/components/DatePicker.tsx';
 import type { MockSale } from '../../data/mock';
 import {
   DollarSign,
@@ -84,12 +85,18 @@ const getStepIcon = (status: string) => {
 };
 
 export const DashboardView: React.FC = () => {
-  const { sales, stats, isLoading, refreshData, getErrors } = useDashboardStore();
+  const { sales, stats, isLoading, refreshData, getErrors, selectedDate, setSelectedDate } = useDashboardStore();
   const errors = getErrors();
 
   useEffect(() => {
     refreshData();
   }, [refreshData]);
+
+  const goToToday = () => {
+    setSelectedDate(new Date());
+  };
+
+  const isToday = selectedDate.toISOString().split('T')[0] === new Date().toISOString().split('T')[0];
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -173,9 +180,27 @@ export const DashboardView: React.FC = () => {
       {/* Sales Timeline */}
       <Card
         header={
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <h2 className="text-base sm:text-lg font-semibold text-gray-900">Timeline de Ventas del Día</h2>
-            <Badge variant="info">{sales.length} ventas</Badge>
+          <div className="flex flex-col gap-3">
+            {/* Date Navigator */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <DatePicker
+                  selectedDate={selectedDate}
+                  onDateSelect={setSelectedDate}
+                  maxDate={new Date()}
+                />
+                {!isToday && (
+                  <button
+                    onClick={goToToday}
+                    className="px-2 py-1 text-xs font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-md transition-colors"
+                  >
+                    Ir a Hoy
+                  </button>
+                )}
+              </div>
+              <Badge variant="info">{sales.length} ventas</Badge>
+            </div>
+            <h2 className="text-base sm:text-lg font-semibold text-gray-900">Timeline de Ventas</h2>
           </div>
         }
       >
