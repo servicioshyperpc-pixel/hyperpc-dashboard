@@ -64,4 +64,3 @@ function App() {
 }
 
 export default App
-// Trigger deploy Sun Feb  1 12:44:18 -03 2026
