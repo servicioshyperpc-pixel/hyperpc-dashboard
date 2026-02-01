@@ -3,14 +3,13 @@ import { Card } from '../../core/components/Card.tsx';
 import { Table } from '../../core/components/Table.tsx';
 import { Badge } from '../../core/components/Badge.tsx';
 import { Input } from '../../core/components/Input.tsx';
-import { Button } from '../../core/components/Button.tsx';
 import { mockProducts } from '../../data/mock';
 import type { MockProduct } from '../../data/mock';
 import {
   Search,
   Filter,
-  Package,
   Camera,
+  Pencil,
   AlertTriangle,
   Image as ImageIcon,
   ChevronLeft,
@@ -147,10 +146,16 @@ export const ProductList: React.FC = () => {
       header: 'Acciones',
       align: 'center' as const,
       render: () => (
-        <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
-          <Camera className="w-4 h-4" />
-          Editar foto
-        </button>
+        <div className="flex items-center justify-center gap-1.5">
+          <button className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+            <Camera className="w-3.5 h-3.5" />
+            Foto
+          </button>
+          <button className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+            <Pencil className="w-3.5 h-3.5" />
+            Título
+          </button>
+        </div>
       ),
     },
   ];
@@ -158,15 +163,9 @@ export const ProductList: React.FC = () => {
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Productos</h1>
-          <p className="text-sm sm:text-base text-gray-600">Gestiona tus productos y su sincronización</p>
-        </div>
-        <Button className="self-start sm:self-auto">
-          <Package className="w-4 h-4 mr-2" />
-          Nuevo Producto
-        </Button>
+      <div>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Productos</h1>
+        <p className="text-sm sm:text-base text-gray-600">Gestiona tus productos y su sincronización</p>
       </div>
 
       {/* Filters */}
