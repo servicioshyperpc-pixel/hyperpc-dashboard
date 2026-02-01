@@ -30,7 +30,7 @@ export function Table<T extends Record<string, any>>({
     center: 'text-center',
     right: 'text-right',
   };
-  
+
   return (
     <div className={`overflow-x-auto ${className}`}>
       <table className="min-w-full divide-y divide-gray-200">
@@ -42,7 +42,7 @@ export function Table<T extends Record<string, any>>({
                 scope="col"
                 style={{ width: column.width }}
                 className={`
-                  px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider
+                  px-3 sm:px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider
                   ${alignClasses[column.align || 'left']}
                   ${headerClassName}
                 `}
@@ -69,7 +69,7 @@ export function Table<T extends Record<string, any>>({
                   <td
                     key={column.key}
                     className={`
-                      px-6 py-4 whitespace-nowrap text-sm text-gray-900
+                      px-3 sm:px-6 py-3 sm:py-4 whitespace-nowrap text-sm text-gray-900
                       ${alignClasses[column.align || 'left']}
                     `}
                   >

@@ -92,61 +92,61 @@ export const DashboardView: React.FC = () => {
   }, [refreshData]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-500 mt-1">Vista general de ventas y sincronización</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-sm sm:text-base text-gray-500 mt-1">Vista general de ventas y sincronización</p>
         </div>
         <button
           onClick={refreshData}
           disabled={isLoading}
-          className="p-2.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all duration-200"
+          className="self-start sm:self-auto p-2.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all duration-200"
         >
           <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
         </button>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-        <Card bodyClassName="flex items-center gap-4">
-          <div className="p-3 bg-blue-50 rounded-xl">
-            <ShoppingCart className="w-6 h-6 text-blue-600" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
+        <Card bodyClassName="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
+          <div className="p-2 sm:p-3 bg-blue-50 rounded-lg sm:rounded-xl">
+            <ShoppingCart className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
           </div>
-          <div>
-            <p className="text-sm font-medium text-gray-500">Total Ventas</p>
-            <p className="text-2xl font-bold text-gray-900">{stats.totalSales}</p>
-          </div>
-        </Card>
-
-        <Card bodyClassName="flex items-center gap-4">
-          <div className="p-3 bg-green-50 rounded-xl">
-            <DollarSign className="w-6 h-6 text-green-600" />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-gray-500">Monto Total</p>
-            <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats.totalAmount)}</p>
+          <div className="min-w-0">
+            <p className="text-xs sm:text-sm font-medium text-gray-500">Total Ventas</p>
+            <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.totalSales}</p>
           </div>
         </Card>
 
-        <Card bodyClassName="flex items-center gap-4">
-          <div className="p-3 bg-red-50 rounded-xl">
-            <AlertTriangle className="w-6 h-6 text-red-500" />
+        <Card bodyClassName="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
+          <div className="p-2 sm:p-3 bg-green-50 rounded-lg sm:rounded-xl">
+            <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
           </div>
-          <div>
-            <p className="text-sm font-medium text-gray-500">Errores</p>
-            <p className="text-2xl font-bold text-gray-900">{stats.errors}</p>
+          <div className="min-w-0 w-full">
+            <p className="text-xs sm:text-sm font-medium text-gray-500">Monto Total</p>
+            <p className="text-lg sm:text-2xl font-bold text-gray-900 truncate">{formatCurrency(stats.totalAmount)}</p>
           </div>
         </Card>
 
-        <Card bodyClassName="flex items-center gap-4">
-          <div className="p-3 bg-amber-50 rounded-xl">
-            <Clock className="w-6 h-6 text-amber-600" />
+        <Card bodyClassName="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
+          <div className="p-2 sm:p-3 bg-red-50 rounded-lg sm:rounded-xl">
+            <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-red-500" />
           </div>
-          <div>
-            <p className="text-sm font-medium text-gray-500">Pendientes</p>
-            <p className="text-2xl font-bold text-gray-900">{stats.pendingOrders}</p>
+          <div className="min-w-0">
+            <p className="text-xs sm:text-sm font-medium text-gray-500">Errores</p>
+            <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.errors}</p>
+          </div>
+        </Card>
+
+        <Card bodyClassName="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
+          <div className="p-2 sm:p-3 bg-amber-50 rounded-lg sm:rounded-xl">
+            <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-amber-600" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs sm:text-sm font-medium text-gray-500">Pendientes</p>
+            <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.pendingOrders}</p>
           </div>
         </Card>
       </div>
@@ -173,34 +173,34 @@ export const DashboardView: React.FC = () => {
       {/* Sales Timeline */}
       <Card
         header={
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">Timeline de Ventas del Día</h2>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <h2 className="text-base sm:text-lg font-semibold text-gray-900">Timeline de Ventas del Día</h2>
             <Badge variant="info">{sales.length} ventas</Badge>
           </div>
         }
       >
         <div className="space-y-6">
           {sales.map((sale) => (
-            <div key={sale.id} className="border-l-2 border-gray-200 pl-4 pb-6 last:pb-0">
+            <div key={sale.id} className="border-l-2 border-gray-200 pl-3 sm:pl-4 pb-6 last:pb-0">
               {/* Sale Header */}
-              <div className="flex items-start justify-between mb-3">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3 mb-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
                     {MARKETPLACE_ICONS[sale.marketplace]}
                   </div>
-                  <div>
-                    <p className="font-medium text-gray-900">{sale.customer}</p>
-                    <p className="text-sm text-gray-500">{sale.product}</p>
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-900 truncate">{sale.customer}</p>
+                    <p className="text-sm text-gray-500 truncate">{sale.product}</p>
                   </div>
                 </div>
-                <div className="text-right">
+                <div className="text-left sm:text-right flex sm:flex-col items-center sm:items-end gap-2 sm:gap-0">
                   <p className="font-semibold text-gray-900">{formatCurrency(sale.amount)}</p>
                   <p className="text-sm text-gray-500">{formatTime(sale.timestamp)}</p>
                 </div>
               </div>
 
               {/* Flow Steps */}
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-3">
                 {sale.flow.map((step, index) => {
                   const config = STEP_CONFIG[step.step];
                   const Icon = config.icon;
@@ -208,11 +208,11 @@ export const DashboardView: React.FC = () => {
 
                   return (
                     <React.Fragment key={step.step}>
-                      <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md ${step.status === 'success' ? 'bg-green-50' :
+                      <div className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md ${step.status === 'success' ? 'bg-green-50' :
                         step.status === 'error' ? 'bg-red-50' :
                           'bg-yellow-50'
                         }`}>
-                        <Icon className={`w-4 h-4 ${step.status === 'success' ? 'text-green-600' :
+                        <Icon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${step.status === 'success' ? 'text-green-600' :
                           step.status === 'error' ? 'text-red-600' :
                             'text-yellow-600'
                           }`} />
@@ -224,7 +224,7 @@ export const DashboardView: React.FC = () => {
                         </span>
                         {getStepIcon(step.status)}
                       </div>
-                      {!isLast && <ArrowRight className="w-4 h-4 text-gray-400" />}
+                      {!isLast && <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400 hidden sm:block" />}
                     </React.Fragment>
                   );
                 })}
@@ -240,10 +240,10 @@ export const DashboardView: React.FC = () => {
               )}
 
               {/* Footer */}
-              <div className="flex items-center gap-4 mt-3 text-sm text-gray-500">
-                <span>Order: {sale.orderId}</span>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-3 text-xs sm:text-sm text-gray-500">
+                <span className="truncate">Order: {sale.orderId}</span>
                 <span>SKU: {sale.sku}</span>
-                <span className="ml-auto">{getStatusBadge(sale.status)}</span>
+                <span className="sm:ml-auto">{getStatusBadge(sale.status)}</span>
               </div>
             </div>
           ))}

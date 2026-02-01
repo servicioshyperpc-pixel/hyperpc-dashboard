@@ -156,23 +156,23 @@ export const ProductList: React.FC = () => {
   ];
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Productos</h1>
-          <p className="text-gray-600">Gestiona tus productos y su sincronización</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Productos</h1>
+          <p className="text-sm sm:text-base text-gray-600">Gestiona tus productos y su sincronización</p>
         </div>
-        <Button>
+        <Button className="self-start sm:self-auto">
           <Package className="w-4 h-4 mr-2" />
           Nuevo Producto
         </Button>
       </div>
 
       {/* Filters */}
-      <Card bodyClassName="flex flex-col md:flex-row gap-4">
+      <Card bodyClassName="flex flex-col sm:flex-row gap-3 sm:gap-4">
         <div className="flex-1 relative">
-          <Search className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" />
+          <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
           <Input
             placeholder="Buscar por SKU o nombre..."
             value={searchQuery}
@@ -182,11 +182,11 @@ export const ProductList: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          <Filter className="w-5 h-5 text-gray-400" />
+          <Filter className="w-5 h-5 text-gray-400 hidden sm:block" />
           <select
             value={selectedMarketplace}
             onChange={(e) => setSelectedMarketplace(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
+            className="w-full sm:w-auto px-3 py-2.5 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500/20 focus:border-gray-500"
           >
             <option value="all">Todos los marketplaces</option>
             <option value="falabella">Falabella</option>
@@ -210,13 +210,13 @@ export const ProductList: React.FC = () => {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
-            <p className="text-sm text-gray-600">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 sm:px-6 py-4 border-t border-gray-200">
+            <p className="text-xs sm:text-sm text-gray-600 order-2 sm:order-1">
               Mostrando {(currentPage - 1) * itemsPerPage + 1} a{' '}
               {Math.min(currentPage * itemsPerPage, filteredProducts.length)} de{' '}
               {filteredProducts.length} productos
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 order-1 sm:order-2">
               <button
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
@@ -225,7 +225,7 @@ export const ProductList: React.FC = () => {
                 <ChevronLeft className="w-5 h-5" />
               </button>
               <span className="text-sm text-gray-600">
-                Página {currentPage} de {totalPages}
+                {currentPage} / {totalPages}
               </span>
               <button
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
