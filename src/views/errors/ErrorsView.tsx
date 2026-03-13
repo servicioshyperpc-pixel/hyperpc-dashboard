@@ -72,10 +72,10 @@ export function ErrorsView() {
   const orderIncidents = incidents.filter((log) => !!log.orderId).length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 sm:space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-950">Historial</h1>
+          <h1 className="text-xl font-bold text-gray-950 sm:text-2xl">Historial</h1>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -97,11 +97,11 @@ export function ErrorsView() {
       <div className="grid gap-4 md:grid-cols-2">
         <Card bodyClassName="space-y-2">
           <p className="text-xs uppercase tracking-[0.18em] text-gray-500">Incidentes</p>
-          <p className="text-3xl font-bold text-gray-950">{incidents.length}</p>
+          <p className="text-2xl font-bold text-gray-950 sm:text-3xl">{incidents.length}</p>
         </Card>
         <Card bodyClassName="space-y-2">
           <p className="text-xs uppercase tracking-[0.18em] text-gray-500">Órdenes afectadas</p>
-          <p className="text-3xl font-bold text-gray-950">{orderIncidents}</p>
+          <p className="text-2xl font-bold text-gray-950 sm:text-3xl">{orderIncidents}</p>
         </Card>
       </div>
 

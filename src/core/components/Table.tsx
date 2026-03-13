@@ -2,7 +2,7 @@ import React from 'react';
 
 export interface TableColumn<T = any> {
   key: string;
-  header: string;
+  header: React.ReactNode;
   width?: string;
   align?: 'left' | 'center' | 'right';
   render?: (item: T) => React.ReactNode;

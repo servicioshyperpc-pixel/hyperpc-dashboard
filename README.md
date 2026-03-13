@@ -1,114 +1,126 @@
 # Dashboard HyperPC
 
-Dashboard de administración para el orquestador de inventario de HyperPC.
+Panel operativo para publicar productos desde Odoo hacia marketplaces y revisar trazabilidad del orquestador.
 
-## Descripción
+## Qué hace hoy
 
-Este dashboard permite visualizar y gestionar el flujo de ventas entre múltiples marketplaces (Falabella, MercadoLibre, Ripley, Paris, Walmart) y Odoo, mostrando el proceso completo desde la recepción de la orden hasta la sincronización de stock.
+### Login
+- autenticación real contra el backend
+- endpoints usados:
+  - `POST /auth/login`
+  - `GET /auth/me`
 
-## Características Principales
+### Productos
+- la tabla base sale solo de Odoo
+- si un producto no existe en Odoo, no aparece en el dashboard
+- cada producto permite:
+  - guardar configuración comercial por marketplace
+  - publicar un canal
+  - publicar canales seleccionados para un solo producto
+  - publicación masiva por lotes
 
-### 1. Dashboard (Inicio)
-- **Timeline de ventas del día**: Visualización del flujo completo (Venta → Odoo → Stock → Marketplaces)
-- **Alertas de errores**: Detección automática de fallas en cualquier paso del proceso
-- **Estadísticas**: Total ventas, monto, errores, órdenes pendientes
-- **Estado por marketplace**: Indicadores visuales de conexión y sincronización
+### Publicación masiva
+- selección múltiple desde la tabla
+- modal para elegir marketplaces
+- modo `Verificar`
+- modo `Publicar`
+- lotes de hasta `100`
+- tamaño por defecto: `50`
 
-### 2. Carga Masiva
-- **Upload CSV/Excel**: Arrastrar y soltar archivos con inventario
-- **Preview de datos**: Vista previa antes de procesar
-- **Selector de marketplaces**: Elegir destinos de sincronización
-- **Progreso en tiempo real**: Barra de progreso con contador
-- **Resultados detallados**: Éxitos, fallos y errores
+### Órdenes
+- vista alimentada por logs reales del orquestador
+- permite revisar órdenes por `orderId`, canal, estado y último evento
 
-### 3. Productos
-- **Catálogo completo**: Lista con filtros por marketplace
-- **Detalle de producto**: Información extendida con imagen
-- **Stock por marketplace**: Niveles de inventario en cada canal
-- **Indicadores de alerta**: Stock bajo destacado
+### Historial
+- consume logs reales desde Mongo a través del backend
+- muestra eventos, errores e incidentes recientes
+- incluye botón `Actualizar`
 
-## Arquitectura
+## Regla de negocio actual
 
+- Odoo es el catálogo maestro
+- el dashboard no edita Odoo
+- el dashboard solo administra publicación y contenido comercial por marketplace
+- si un producto no existe en Odoo, no se publica desde este panel
+
+## Arquitectura operativa
+
+### Fuente de datos
+- catálogo: Odoo
+- estados de publicación: Mongo
+- trazabilidad operativa: `/logs`
+
+### Marketplaces soportados
+- Falabella
+- MercadoLibre
+- Ripley
+- Paris
+- Walmart
+
+## Stack
+
+- React 19
+- TypeScript
+- Vite
+- Zustand
+- React Router DOM
+- Tailwind CSS
+- Lucide React
+
+## Variables
+
+Crear un `.env.local` con:
+
+```bash
+VITE_API_URL=https://backend-or-api.fly.dev
 ```
-src/
-├── api/           # Cliente HTTP con interceptores
-├── core/          # Componentes UI, layouts, utilidades
-├── integrations/  # Adaptadores por marketplace
-├── store/         # Estados globales (Zustand)
-├── views/         # Páginas principales
-└── data/          # Datos mock para desarrollo
-```
 
-## Stack Tecnológico
-
-- **React 18** + **TypeScript**
-- **Vite** (build tool)
-- **Tailwind CSS** (estilos)
-- **Zustand** (gestión de estado)
-- **React Router DOM** (navegación)
-- **Lucide React** (iconos)
-
-## Marketplaces Soportados
-
-- ✅ Falabella
-- ✅ MercadoLibre
-- ✅ Ripley
-- ✅ Paris
-- ✅ Walmart
-- ✅ Odoo (ERP)
-
-## Instalación
+## Desarrollo local
 
 ```bash
 npm install
-```
-
-## Desarrollo
-
-```bash
 npm run dev
 ```
 
-La aplicación estará disponible en `http://localhost:5173`
-
-## Build Producción
+## Build
 
 ```bash
 npm run build
 ```
 
-## Datos de Prueba (Mock)
+## Deploy
 
-El dashboard incluye datos mock para demostración:
-- 5 ventas de ejemplo con diferentes estados
-- 5 productos con stock variado
-- Logs del sistema con éxitos y errores
+El proyecto puede desplegarse en Vercel.
 
-### Usuarios de prueba
-- **Admin**: `admin@hyperpc.cl` / `admin123`
-- **Usuario**: `user@hyperpc.cl` / `user123`
+Si el repo ya está linkeado al proyecto correcto:
 
-## Flujo de Ventas Visualizado
+```bash
+vercel --prod
+```
 
-Cada venta muestra el proceso en 4 pasos:
-1. **Orden Recibida** → Llegada desde marketplace
-2. **Odoo Procesando** → Confirmación en ERP
-3. **Stock Rebajado** → Descontar inventario
-4. **Marketplaces Sync** → Actualizar otros canales
+## Flujo recomendado de uso
 
-Indicadores visuales:
-- 🟢 Éxito
-- 🔴 Error (con mensaje)
-- ⚪ Pendiente
+1. crear o actualizar producto en Odoo
+2. abrir el producto en el dashboard
+3. completar configuración por marketplace
+4. usar `Verificar`
+5. publicar un canal, varios canales del producto, o una selección masiva
 
-## Próximos Pasos (Integración)
+## Estado actual
 
-Para conectar con el backend real:
-1. Configurar `VITE_API_URL` en `.env`
-2. Implementar autenticación JWT
-3. Conectar endpoints del orquestador
-4. WebSockets para notificaciones en tiempo real
+### Hecho
+- login real
+- catálogo desde Odoo
+- borradores por marketplace
+- publicación individual
+- publicación por canales seleccionados para un producto
+- publicación masiva
+- órdenes e historial desde logs reales
 
-## Licencia
+### Pendiente de validar operativamente
+- pruebas completas por marketplace con datos reales del cliente
+- ajustes finos de categorías, atributos e imágenes por canal
 
-Proyecto privado - HyperPC Chile
+## Nota
+
+La verificación masiva está optimizada para trabajar con Odoo y estado local del orquestador. No depende de consultas en vivo a todos los marketplaces en cada ejecución.

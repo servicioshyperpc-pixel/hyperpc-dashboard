@@ -1,303 +1,187 @@
-import React, { useEffect } from 'react';
-import { useDashboardStore } from '../../store/useDashboardStore';
-import { Card } from '../../core/components/Card.tsx';
-import { Badge } from '../../core/components/Badge.tsx';
-import { DatePicker } from '../../core/components/DatePicker.tsx';
-import type { MockSale } from '../../data/mock';
-import {
-  DollarSign,
-  ShoppingCart,
-  AlertTriangle,
-  Clock,
-  RefreshCw,
-  CheckCircle,
-  XCircle,
-  Loader,
-  ArrowRight,
-  Package,
-  Store,
-  ShoppingBag,
-  Zap
-} from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Card } from '../../core/components/Card';
+import { Badge } from '../../core/components/Badge';
+import axiosInstance from '../../api/axiosInstance';
+import { BellRing, Boxes, CircleAlert, Package, RefreshCw, ScrollText } from 'lucide-react';
 
-const MARKETPLACE_ICONS: Record<string, React.ReactNode> = {
-  falabella: <span className="font-bold text-green-600">F</span>,
-  mercadolibre: <span className="font-bold text-yellow-500">ML</span>,
-  ripley: <span className="font-bold text-red-600">R</span>,
-  paris: <span className="font-bold text-blue-600">P</span>,
-  walmart: <span className="font-bold text-blue-800">W</span>,
-};
+interface CatalogResponse {
+  total: number;
+  marketplaces?: string[];
+}
 
-const MARKETPLACE_NAMES: Record<string, string> = {
-  falabella: 'Falabella',
-  mercadolibre: 'MercadoLibre',
-  ripley: 'Ripley',
-  paris: 'Paris',
-  walmart: 'Walmart',
-};
+interface LogEntry {
+  _id?: string;
+  id?: string;
+  service?: string;
+  action?: string;
+  status?: string;
+  orderId?: string;
+  productSku?: string;
+  marketplace?: string;
+  createdAt?: string;
+}
 
-const STEP_CONFIG = {
-  order_received: { icon: ShoppingBag, label: 'Venta' },
-  odoo_processing: { icon: Zap, label: 'Odoo' },
-  stock_deducted: { icon: Package, label: 'Stock' },
-  marketplaces_synced: { icon: Store, label: 'Marketplaces' },
-};
-
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('es-CL', {
-    style: 'currency',
-    currency: 'CLP',
-    minimumFractionDigits: 0,
-  }).format(amount);
-};
-
-const formatTime = (timestamp: string) => {
-  const date = new Date(timestamp);
-  return date.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
-};
-
-const getStatusBadge = (status: MockSale['status']) => {
-  switch (status) {
-    case 'completed':
-      return <Badge variant="success">Completado</Badge>;
-    case 'processing':
-      return <Badge variant="info">Procesando</Badge>;
-    case 'error':
-      return <Badge variant="error">Error</Badge>;
-    case 'pending':
-      return <Badge variant="warning">Pendiente</Badge>;
-    default:
-      return <Badge>Desconocido</Badge>;
-  }
-};
-
-const getStepIcon = (status: string) => {
-  switch (status) {
-    case 'success':
-      return <CheckCircle className="w-5 h-5 text-green-500" />;
-    case 'error':
-      return <XCircle className="w-5 h-5 text-red-500" />;
-    case 'pending':
-      return <Loader className="w-5 h-5 text-yellow-500 animate-spin" />;
-    default:
-      return <Clock className="w-5 h-5 text-gray-400" />;
-  }
-};
+const ERROR_STATUSES = new Set(['error', 'warning', 'partial']);
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const DashboardView: React.FC = () => {
-  const { sales, stats, isLoading, refreshData, getErrors, selectedDate, setSelectedDate } = useDashboardStore();
-  const errors = getErrors();
+  const [catalog, setCatalog] = useState<CatalogResponse>({ total: 0, marketplaces: [] });
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    refreshData();
-  }, [refreshData]);
+    let mounted = true;
 
-  const goToToday = () => {
-    setSelectedDate(new Date());
-  };
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [catalogResponse, logsResponse] = await Promise.all([
+          axiosInstance.get<CatalogResponse>('/catalog/products?limit=1'),
+          axiosInstance.get<LogEntry[]>('/logs'),
+        ]);
 
-  const isToday = selectedDate.toISOString().split('T')[0] === new Date().toISOString().split('T')[0];
+        if (!mounted) return;
+
+        setCatalog({
+          total: catalogResponse.data?.total || 0,
+          marketplaces: catalogResponse.data?.marketplaces || [],
+        });
+        setLogs(Array.isArray(logsResponse.data) ? logsResponse.data : []);
+      } catch {
+        if (!mounted) return;
+        setCatalog({ total: 0, marketplaces: [] });
+        setLogs([]);
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    load();
+  }, []);
+
+  const recentLogs = useMemo(
+    () => [...logs].sort((a, b) => +new Date(b.createdAt || 0) - +new Date(a.createdAt || 0)).slice(0, 6),
+    [logs],
+  );
+
+  const recentIncidentCount = useMemo(() => {
+    const now = Date.now();
+    return logs.filter((log) => {
+      if (!log.status || !ERROR_STATUSES.has(log.status)) return false;
+      if (!log.createdAt) return true;
+      return now - new Date(log.createdAt).getTime() <= SEVEN_DAYS_MS;
+    }).length;
+  }, [logs]);
+
+  const cards = [
+    { label: 'Productos catálogo Odoo', value: catalog.total, helper: '', icon: Package },
+    { label: 'Canales configurados', value: catalog.marketplaces?.length || 0, helper: '', icon: Boxes },
+    { label: 'Eventos registrados', value: logs.length, helper: '', icon: ScrollText },
+    { label: 'Incidentes 7 días', value: recentIncidentCount, helper: '', icon: CircleAlert },
+  ];
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div className="space-y-5 sm:space-y-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-sm sm:text-base text-gray-500 mt-1">Vista general de ventas y sincronización</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-gray-500">Centro de operación</p>
+          <h1 className="mt-2 text-3xl font-bold text-gray-950">Resumen operativo real</h1>
         </div>
         <button
-          onClick={refreshData}
-          disabled={isLoading}
-          className="self-start sm:self-auto p-2.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all duration-200"
+          onClick={() => window.location.reload()}
+          disabled={loading}
+          className="inline-flex items-center gap-2 rounded-2xl bg-gray-950 px-4 py-3 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-60"
         >
-          <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          Refrescar
         </button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
-        <Card bodyClassName="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
-          <div className="p-2 sm:p-3 bg-blue-50 rounded-lg sm:rounded-xl">
-            <ShoppingCart className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs sm:text-sm font-medium text-gray-500">Total Ventas</p>
-            <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.totalSales}</p>
-          </div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {cards.map((card) => {
+          const Icon = card.icon;
+          return (
+            <Card key={card.label} bodyClassName="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-gray-500">{card.label}</p>
+                <div className="rounded-2xl bg-gray-950 p-2 text-white">
+                  <Icon className="h-4 w-4" />
+                </div>
+              </div>
+              <p className="text-2xl font-bold text-gray-950 sm:text-3xl">{card.value}</p>
+              {card.helper ? <p className="text-sm text-gray-500">{card.helper}</p> : null}
+            </Card>
+          );
+        })}
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <Card
+          header={
+            <div>
+              <p className="text-xs uppercase tracking-[0.18em] text-gray-500">Actividad</p>
+              <h2 className="mt-1 text-lg font-semibold text-gray-950">Historial reciente del orquestador</h2>
+            </div>
+          }
+        >
+          {recentLogs.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-6 py-10 text-center">
+              <BellRing className="mx-auto h-8 w-8 text-gray-400" />
+              <p className="mt-4 font-medium text-gray-900">Todavía no hay eventos visibles</p>
+              <p className="mt-2 text-sm text-gray-500">
+                Cuando el backend registre órdenes, sincronizaciones o errores, aparecerán aquí.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {recentLogs.map((log) => (
+                <div key={log._id || log.id || `${log.service}-${log.action}-${log.createdAt}`} className="rounded-2xl border border-gray-200 bg-white px-4 py-4">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold text-gray-950">{log.action || 'Evento'}</p>
+                        <Badge variant={log.status === 'success' ? 'success' : ERROR_STATUSES.has(log.status || '') ? 'error' : 'default'} size="sm">
+                          {log.status || 'unknown'}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-sm text-gray-500">
+                        {log.service || 'servicio'}
+                        {log.marketplace ? ` · ${log.marketplace}` : ''}
+                        {log.orderId ? ` · orden ${log.orderId}` : ''}
+                        {log.productSku ? ` · SKU ${log.productSku}` : ''}
+                      </p>
+                    </div>
+                    <p className="text-sm text-gray-500 whitespace-nowrap">
+                      {log.createdAt ? new Date(log.createdAt).toLocaleString('es-CL') : 'Sin fecha'}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
 
-        <Card bodyClassName="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
-          <div className="p-2 sm:p-3 bg-green-50 rounded-lg sm:rounded-xl">
-            <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
-          </div>
-          <div className="min-w-0 w-full">
-            <p className="text-xs sm:text-sm font-medium text-gray-500">Monto Total</p>
-            <p className="text-lg sm:text-2xl font-bold text-gray-900 truncate">{formatCurrency(stats.totalAmount)}</p>
-          </div>
-        </Card>
-
-        <Card bodyClassName="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
-          <div className="p-2 sm:p-3 bg-red-50 rounded-lg sm:rounded-xl">
-            <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-red-500" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs sm:text-sm font-medium text-gray-500">Errores</p>
-            <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.errors}</p>
-          </div>
-        </Card>
-
-        <Card bodyClassName="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
-          <div className="p-2 sm:p-3 bg-amber-50 rounded-lg sm:rounded-xl">
-            <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-amber-600" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs sm:text-sm font-medium text-gray-500">Pendientes</p>
-            <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.pendingOrders}</p>
+        <Card
+          header={
+            <div>
+              <p className="text-xs uppercase tracking-[0.18em] text-gray-500">Canales</p>
+              <h2 className="mt-1 text-lg font-semibold text-gray-950">Canales disponibles</h2>
+            </div>
+          }
+        >
+          <div className="flex flex-wrap gap-2">
+            {(catalog.marketplaces || []).length === 0 ? (
+              <p className="text-sm text-gray-500">Sin canales.</p>
+            ) : (
+              (catalog.marketplaces || []).map((marketplace) => (
+                <Badge key={marketplace} variant="info">{marketplace}</Badge>
+              ))
+            )}
           </div>
         </Card>
       </div>
-
-      {/* Error Alerts */}
-      {errors.length > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <AlertTriangle className="w-5 h-5 text-red-600" />
-            <h3 className="font-semibold text-red-800">Alertas de Error ({errors.length})</h3>
-          </div>
-          <div className="space-y-2">
-            {errors.slice(0, 3).map((log) => (
-              <div key={log.id} className="flex items-center gap-3 text-sm">
-                <XCircle className="w-4 h-4 text-red-500" />
-                <span className="text-red-700">{log.message}</span>
-                <span className="text-red-400">{new Date(log.timestamp).toLocaleTimeString('es-CL')}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Sales Timeline */}
-      <Card
-        header={
-          <div className="flex flex-col gap-3">
-            {/* Date Navigator */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <DatePicker
-                  selectedDate={selectedDate}
-                  onDateSelect={setSelectedDate}
-                  maxDate={new Date()}
-                />
-                {!isToday && (
-                  <button
-                    onClick={goToToday}
-                    className="px-2 py-1 text-xs font-medium text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-md transition-colors"
-                  >
-                    Ir a Hoy
-                  </button>
-                )}
-              </div>
-              <Badge variant="info">{sales.length} ventas</Badge>
-            </div>
-            <h2 className="text-base sm:text-lg font-semibold text-gray-900">Timeline de Ventas</h2>
-          </div>
-        }
-      >
-        <div className="space-y-6">
-          {sales.map((sale) => (
-            <div key={sale.id} className="border-l-2 border-gray-200 pl-3 sm:pl-4 pb-6 last:pb-0">
-              {/* Sale Header */}
-              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3 mb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-                    {MARKETPLACE_ICONS[sale.marketplace]}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-medium text-gray-900 truncate">{sale.customer}</p>
-                    <p className="text-sm text-gray-500 truncate">{sale.product}</p>
-                  </div>
-                </div>
-                <div className="text-left sm:text-right flex sm:flex-col items-center sm:items-end gap-2 sm:gap-0">
-                  <p className="font-semibold text-gray-900">{formatCurrency(sale.amount)}</p>
-                  <p className="text-sm text-gray-500">{formatTime(sale.timestamp)}</p>
-                </div>
-              </div>
-
-              {/* Flow Steps */}
-              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-3">
-                {sale.flow.map((step, index) => {
-                  const config = STEP_CONFIG[step.step];
-                  const Icon = config.icon;
-                  const isLast = index === sale.flow.length - 1;
-
-                  return (
-                    <React.Fragment key={step.step}>
-                      <div className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-md ${step.status === 'success' ? 'bg-green-50' :
-                        step.status === 'error' ? 'bg-red-50' :
-                          'bg-yellow-50'
-                        }`}>
-                        <Icon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${step.status === 'success' ? 'text-green-600' :
-                          step.status === 'error' ? 'text-red-600' :
-                            'text-yellow-600'
-                          }`} />
-                        <span className={`text-xs font-medium ${step.status === 'success' ? 'text-green-700' :
-                          step.status === 'error' ? 'text-red-700' :
-                            'text-yellow-700'
-                          }`}>
-                          {config.label}
-                        </span>
-                        {getStepIcon(step.status)}
-                      </div>
-                      {!isLast && <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400 hidden sm:block" />}
-                    </React.Fragment>
-                  );
-                })}
-              </div>
-
-              {/* Error Details */}
-              {sale.flow.some(step => step.error) && (
-                <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-md">
-                  <p className="text-sm text-red-700">
-                    {sale.flow.find(step => step.error)?.error}
-                  </p>
-                </div>
-              )}
-
-              {/* Footer */}
-              <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-3 text-xs sm:text-sm text-gray-500">
-                <span className="truncate">Order: {sale.orderId}</span>
-                <span>SKU: {sale.sku}</span>
-                <span className="sm:ml-auto">{getStatusBadge(sale.status)}</span>
-              </div>
-            </div>
-          ))}
-
-          {sales.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
-              <ShoppingBag className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-              <p>No hay ventas registradas hoy</p>
-            </div>
-          )}
-        </div>
-      </Card>
-
-      {/* Marketplace Stats */}
-      <Card header={<h2 className="text-lg font-semibold text-gray-900">Ventas por Marketplace</h2>}>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          {Object.entries(stats.ordersByMarketplace).map(([marketplace, count]) => (
-            <div key={marketplace} className="p-4 bg-gray-50 rounded-lg text-center">
-              <div className="w-8 h-8 mx-auto mb-2 bg-white rounded shadow-sm flex items-center justify-center">
-                {MARKETPLACE_ICONS[marketplace]}
-              </div>
-              <p className="text-sm text-gray-600">{MARKETPLACE_NAMES[marketplace]}</p>
-              <p className="text-xl font-bold text-gray-900">{count}</p>
-            </div>
-          ))}
-        </div>
-      </Card>
     </div>
   );
 };
-
-export default DashboardView;
