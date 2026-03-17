@@ -124,3 +124,4 @@ vercel --prod
 ## Nota
 
 La verificación masiva está optimizada para trabajar con Odoo y estado local del orquestador. No depende de consultas en vivo a todos los marketplaces en cada ejecución.
+.
