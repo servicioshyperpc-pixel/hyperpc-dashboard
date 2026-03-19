@@ -16,7 +16,6 @@ import {
   Rocket,
   Search,
   Settings,
-  Store,
   Upload,
   X,
 } from 'lucide-react';
