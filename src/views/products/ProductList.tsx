@@ -7,6 +7,7 @@ import { Button } from '../../core/components/Button.tsx';
 import axiosInstance from '../../api/axiosInstance';
 import {
   AlertTriangle,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Eye,
@@ -14,6 +15,7 @@ import {
   Pencil,
   Rocket,
   Search,
+  Settings,
   Store,
   Upload,
   X,
@@ -169,6 +171,42 @@ const attributesToMultiline = (attributes?: Array<{ key?: string; value?: string
         .join('\n')
     : '';
 
+const friendlyFieldName = (raw: string): string => {
+  const map: Record<string, string> = {
+    'title': 'Título',
+    'description': 'Descripción',
+    'price': 'Precio',
+    'imageUrl': 'URL de imagen',
+    'payload.configuration.familyId': 'Family ID (Paris)',
+    'payload.configuration.category': 'Categoría',
+    'payload.configuration.categoryId': 'Categoría (MeLi)',
+    'payload.configuration.categoryCode': 'Categoría (Ripley)',
+    'payload.configuration.primaryCategory': 'Categoría principal (Falabella)',
+    'payload.configuration.brand': 'Marca',
+    'payload.configuration.gtin': 'GTIN / Código de barras',
+    'payload.configuration.productId': 'Product ID (Falabella)',
+    'payload.configuration.operatorCode': 'Código operador',
+    'payload.configuration.listingTypeId': 'Tipo de publicación (MeLi)',
+    'payload.configuration.condition': 'Condición',
+    'payload.configuration.currencyId': 'Moneda',
+    'payload.configuration.variantId': 'Variante ID (Ripley)',
+    'payload.configuration.leadtimeToShip': 'Tiempo de envío (Ripley)',
+    'payload.configuration.mediaName': 'Nombre media (Paris)',
+    'payload.configuration.thumbnailUrl': 'URL miniatura (Ripley)',
+    'payload.configuration.productData': 'Atributos producto (Falabella)',
+    'payload.configuration.productAttributes': 'Atributos producto (Paris)',
+    'payload.configuration.variantAttributes': 'Atributos variante (Paris)',
+    'payload.configuration.attributes': 'Atributos',
+    'payload.configuration.imageUrl': 'URL de imagen',
+  };
+  // Try exact match, then strip prefix and try, then humanize the last segment
+  if (map[raw]) return map[raw];
+  const stripped = raw.replace('payload.configuration.', '');
+  if (map[stripped]) return map[stripped];
+  // Humanize: camelCase → "Camel Case"
+  return stripped.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase());
+};
+
 const emptyForm = {
   title: '',
   description: '',
@@ -234,6 +272,7 @@ export const ProductList: React.FC = () => {
   const [bulkResults, setBulkResults] = useState<BulkPublishSkuResult[]>([]);
   const [isProductPublishModalOpen, setIsProductPublishModalOpen] = useState(false);
   const [productPublishMarketplaces, setProductPublishMarketplaces] = useState<MarketplaceKey[]>(MARKETPLACES);
+  const [showAdvancedConfig, setShowAdvancedConfig] = useState(false);
 
   const loadCatalog = useCallback(async () => {
     setIsLoading(true);
@@ -983,72 +1022,69 @@ export const ProductList: React.FC = () => {
                   </div>
 
                   <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm space-y-5 sm:p-5">
-                    {(() => {
-                      const channelDetail = selectedProduct.marketplaceDetails[selectedMarketplace];
-                      const validation = VALIDATION_META[channelDetail.validation?.status || 'unknown'];
-
-                      return (
-                        <>
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <p className="text-sm font-semibold text-gray-950">{MARKETPLACE_LABELS[selectedMarketplace]}</p>
-                        <p className="text-xs text-gray-500">{STATUS_META[selectedProduct.marketplaceDetails[selectedMarketplace].status].helper}</p>
+                        <p className="text-xs text-gray-500">
+                          {selectedProduct.marketplaceDetails[selectedMarketplace].existsInMarketplace
+                            ? 'Producto publicado — edita los datos y guarda para actualizar'
+                            : 'Completa los datos y publica en este canal'}
+                        </p>
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        <Badge variant={STATUS_META[selectedProduct.marketplaceDetails[selectedMarketplace].status].variant}>
-                          {STATUS_META[selectedProduct.marketplaceDetails[selectedMarketplace].status].label}
-                        </Badge>
-                        <Badge variant={validation.variant}>{validation.label}</Badge>
-                      </div>
+                      <Badge variant={STATUS_META[selectedProduct.marketplaceDetails[selectedMarketplace].status].variant}>
+                        {STATUS_META[selectedProduct.marketplaceDetails[selectedMarketplace].status].label}
+                      </Badge>
                     </div>
 
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 space-y-2">
-                      <p className="text-sm font-medium text-gray-900">{validation.helper}</p>
-                      <p className="text-xs text-gray-500">
-                        Verificación: {channelDetail.validation?.checkedWith === 'api' ? 'API real del marketplace' : 'estado local del orquestador'}
-                      </p>
-                      {channelDetail.validation?.message && channelDetail.validation.status !== 'unknown' && (
-                        <p className="text-xs text-gray-600">{channelDetail.validation.message}</p>
-                      )}
-                      {channelDetail.validation?.missingFields?.length ? (
-                        <div className="flex flex-wrap gap-2 pt-1">
-                          {channelDetail.validation.missingFields.map((field) => (
-                            <span key={field} className="rounded-full bg-red-100 px-2 py-1 text-[11px] font-medium text-red-700">
-                              {field}
+                    {/* Warning si faltan campos obligatorios */}
+                    {selectedProduct.marketplaceDetails[selectedMarketplace].validation?.missingFields?.length ? (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                        <p className="text-sm font-medium text-amber-800">Faltan campos para publicar:</p>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {selectedProduct.marketplaceDetails[selectedMarketplace].validation!.missingFields.map((field) => (
+                            <span key={field} className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700">
+                              {friendlyFieldName(field)}
                             </span>
                           ))}
                         </div>
-                      ) : null}
-                    </div>
-                        </>
-                      );
-                    })()}
+                        <p className="text-xs text-amber-600 mt-2">Abre &quot;Configuración avanzada&quot; para completarlos.</p>
+                      </div>
+                    ) : null}
 
                     <Input
-                      label="Título marketplace"
+                      label="Título"
                       value={formState.title}
                       onChange={(e) => setFormState((current) => ({ ...current, title: e.target.value }))}
-                      placeholder="Título comercial del canal"
+                      placeholder="Nombre del producto en este marketplace"
                     />
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Descripción marketplace</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
                       <textarea
                         value={formState.description}
                         onChange={(e) => setFormState((current) => ({ ...current, description: e.target.value }))}
-                        rows={5}
+                        rows={4}
                         className="block w-full px-4 py-2.5 bg-white border-2 border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-gray-500/20 focus:border-gray-500"
-                        placeholder="Descripción comercial para el canal"
+                        placeholder="Descripción del producto"
                       />
                     </div>
 
-                    <Input
-                      label="Precio marketplace"
-                      type="number"
-                      value={formState.price}
-                      onChange={(e) => setFormState((current) => ({ ...current, price: e.target.value }))}
-                      placeholder="849990"
-                    />
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Input
+                        label="Precio"
+                        type="number"
+                        value={formState.price}
+                        onChange={(e) => setFormState((current) => ({ ...current, price: e.target.value }))}
+                        placeholder="0"
+                      />
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Stock Odoo</label>
+                        <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-2 border-gray-200 rounded-lg text-gray-900">
+                          <span className="font-semibold">{selectedProduct.stock}</span>
+                          <span className="text-xs text-gray-500">unidades</span>
+                        </div>
+                      </div>
+                    </div>
 
                     <Input
                       label="Imagen URL"
@@ -1057,6 +1093,21 @@ export const ProductList: React.FC = () => {
                       placeholder="https://..."
                     />
 
+                    {/* Configuracion avanzada — colapsable */}
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvancedConfig((v) => !v)}
+                      className="flex w-full items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-600 transition hover:bg-gray-100"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Settings className="h-4 w-4" />
+                        Configuración avanzada del canal
+                      </span>
+                      <ChevronDown className={`h-4 w-4 transition-transform ${showAdvancedConfig ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {showAdvancedConfig && (
+                    <>
                     {selectedMarketplace === 'falabella' && (
                       <div className="space-y-4 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
                         <div>
@@ -1333,6 +1384,9 @@ export const ProductList: React.FC = () => {
                         External ID: {selectedProduct.marketplaceDetails[selectedMarketplace].externalProductId}
                       </div>
                     )}
+                    </>
+                    )}
+                    {/* Fin configuracion avanzada */}
 
                     <div className="grid gap-3 sm:grid-cols-2">
                       <button
@@ -1367,17 +1421,6 @@ export const ProductList: React.FC = () => {
                       </button>
                     </div>
 
-                    <div className="rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 space-y-2">
-                      <div className="text-xs text-gray-500 flex items-start gap-2">
-                        <Store className="w-3.5 h-3.5 mt-0.5" />
-                        <span>Aquí editas solo el contenido comercial del marketplace seleccionado. No modifica Odoo.</span>
-                      </div>
-                      <div className="text-xs text-gray-500 flex items-start gap-2">
-                        <Rocket className="w-3.5 h-3.5 mt-0.5" />
-                        <span>Si quieres publicar varios canales o varios productos, usa el botón <strong>Publicación masiva</strong> de la tabla principal.</span>
-                      </div>
-                    </div>
-
                     {detailNotice && (
                       <div className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">{detailNotice}</div>
                     )}
@@ -1389,7 +1432,7 @@ export const ProductList: React.FC = () => {
                     <div className="flex justify-end pt-1">
                       <Button onClick={() => void handleSaveDraft()} isLoading={isSaving} className="gap-1.5 min-w-40">
                         <Pencil className="w-4 h-4" />
-                        Guardar borrador
+                        Guardar cambios
                       </Button>
                     </div>
                   </div>

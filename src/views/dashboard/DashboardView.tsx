@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Card } from '../../core/components/Card';
 import { Badge } from '../../core/components/Badge';
 import axiosInstance from '../../api/axiosInstance';
-import { BellRing, Boxes, CircleAlert, Package, RefreshCw, ScrollText, ShoppingCart, XCircle, ArrowDownUp, AlertTriangle } from 'lucide-react';
+import { BellRing, CircleAlert, Package, RefreshCw, ScrollText, ShoppingCart, XCircle, ArrowDownUp, AlertTriangle } from 'lucide-react';
 
 interface CatalogResponse {
   total: number;

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Card } from '../../core/components/Card';
 import { Badge } from '../../core/components/Badge';
 import axiosInstance from '../../api/axiosInstance';
-import { AlertTriangle, Clock3, RefreshCcw, ScrollText, ShieldAlert, Package, Wifi, Database, ChevronDown, ChevronUp, CheckCheck, Trash2 } from 'lucide-react';
+import { AlertTriangle, RefreshCcw, ScrollText, ShieldAlert, Package, Wifi, Database, ChevronDown, ChevronUp, CheckCheck, Trash2 } from 'lucide-react';
 
 interface LogEntry {
   _id?: string;
@@ -189,7 +189,6 @@ export function ErrorsView() {
 
   const errorCount = incidents.filter((l) => l.status === 'error').length;
   const warningCount = incidents.filter((l) => l.status === 'warning' || l.status === 'partial').length;
-  const orderIncidents = incidents.filter((log) => !!log.orderId).length;
   const affectedMarketplaces = new Set(incidents.map((l) => l.marketplace).filter(Boolean));
 
   return (
