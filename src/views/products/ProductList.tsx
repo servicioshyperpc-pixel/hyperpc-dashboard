@@ -13,6 +13,7 @@ import {
   Eye,
   Image as ImageIcon,
   Pencil,
+  RefreshCw,
   Rocket,
   Search,
   Settings,
@@ -283,6 +284,7 @@ export const ProductList: React.FC = () => {
   const [stockFilter, setStockFilter] = useState<'all' | 'with_stock' | 'no_stock'>('all');
   const [stockSort, setStockSort] = useState<'none' | 'asc' | 'desc'>('none');
   const [marketplaceFilter, setMarketplaceFilter] = useState<string>('all');
+  const [isSyncing, setIsSyncing] = useState(false);
   const [isBulkUpdateModalOpen, setIsBulkUpdateModalOpen] = useState(false);
   const [bulkUpdateMarketplaces, setBulkUpdateMarketplaces] = useState<MarketplaceKey[]>(MARKETPLACES);
 
@@ -298,7 +300,6 @@ export const ProductList: React.FC = () => {
           limit: 15,
           stockFilter: stockFilter !== 'all' ? stockFilter : undefined,
           sortBy: stockSort !== 'none' ? `stock_${stockSort}` : undefined,
-          marketplace: marketplaceFilter !== 'all' ? marketplaceFilter : undefined,
         },
       });
 
@@ -308,7 +309,7 @@ export const ProductList: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [currentPage, searchQuery, stockFilter, stockSort, marketplaceFilter]);
+  }, [currentPage, searchQuery, stockFilter, stockSort]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -320,7 +321,37 @@ export const ProductList: React.FC = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, stockFilter, stockSort, marketplaceFilter]);
+  }, [searchQuery, stockFilter, stockSort]);
+
+  const syncMarketplaceStatus = async () => {
+    if (catalog.items.length === 0) return;
+    setIsSyncing(true);
+    try {
+      const skus = catalog.items.map((item) => item.sku);
+      const { data } = await axiosInstance.post<Record<string, Record<string, { exists: boolean; externalId: string | null }>>>('/catalog/products/sync-status', { skus });
+
+      setCatalog((prev) => ({
+        ...prev,
+        items: prev.items.map((item) => ({
+          ...item,
+          publications: item.publications.map((pub) => {
+            const syncResult = data[item.sku]?.[pub.marketplace];
+            if (!syncResult) return pub;
+            return {
+              ...pub,
+              existsInMarketplace: syncResult.exists,
+              externalProductId: syncResult.externalId,
+              lastSyncedAt: new Date().toISOString(),
+            };
+          }),
+        })),
+      }));
+    } catch (error) {
+      console.error('Error syncing marketplace status:', error);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const toggleSkuSelection = (sku: string) => {
     setSelectedSkus((current) =>
@@ -694,12 +725,17 @@ export const ProductList: React.FC = () => {
       header: MARKETPLACE_LABELS[marketplace],
       align: 'center' as const,
       render: (product: CatalogProduct) => {
+        const publication = product.publications.find((entry) => entry.marketplace === marketplace);
         if (product.stock === 0) {
           return <Badge variant="error">Sin stock</Badge>;
         }
-        const publication = product.publications.find((entry) => entry.marketplace === marketplace);
-        const meta = STATUS_META[publication?.status || 'missing'];
-        return <Badge variant={meta.variant}>{meta.label}</Badge>;
+        if (!publication?.lastSyncedAt) {
+          const meta = STATUS_META[publication?.status || 'missing'];
+          return <Badge variant={meta.variant}>{meta.label}</Badge>;
+        }
+        return publication.existsInMarketplace
+          ? <Badge variant="success">Publicado</Badge>
+          : <Badge variant="error">No publicado</Badge>;
       },
     })),
     {
@@ -828,6 +864,15 @@ export const ProductList: React.FC = () => {
             <option key={mp} value={mp}>{mp.charAt(0).toUpperCase() + mp.slice(1)}</option>
           ))}
         </select>
+        <button
+          type="button"
+          onClick={() => void syncMarketplaceStatus()}
+          disabled={isSyncing || isLoading || catalog.items.length === 0}
+          className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-4 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+          {isSyncing ? 'Sincronizando...' : 'Sincronizar marketplaces'}
+        </button>
       </div>
 
       <Card className="overflow-hidden">
