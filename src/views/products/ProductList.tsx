@@ -295,6 +295,8 @@ export const ProductList: React.FC = () => {
           search: searchQuery || undefined,
           page: currentPage,
           limit: 15,
+          stockFilter: stockFilter !== 'all' ? stockFilter : undefined,
+          sortBy: stockSort !== 'none' ? `stock_${stockSort}` : undefined,
         },
       });
 
@@ -304,7 +306,7 @@ export const ProductList: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [currentPage, searchQuery]);
+  }, [currentPage, searchQuery, stockFilter, stockSort]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -316,7 +318,7 @@ export const ProductList: React.FC = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery]);
+  }, [searchQuery, stockFilter, stockSort]);
 
   const toggleSkuSelection = (sku: string) => {
     setSelectedSkus((current) =>
@@ -582,19 +584,9 @@ export const ProductList: React.FC = () => {
     return 'unpublished';
   };
 
-  const filteredItems = (() => {
-    let items = statusFilter === 'all'
-      ? catalog.items
-      : catalog.items.filter((product) => getProductGlobalStatus(product) === statusFilter);
-
-    if (stockFilter === 'with_stock') items = items.filter((p) => p.stock > 0);
-    if (stockFilter === 'no_stock') items = items.filter((p) => p.stock === 0);
-
-    if (stockSort === 'asc') items = [...items].sort((a, b) => a.stock - b.stock);
-    if (stockSort === 'desc') items = [...items].sort((a, b) => b.stock - a.stock);
-
-    return items;
-  })();
+  const filteredItems = statusFilter === 'all'
+    ? catalog.items
+    : catalog.items.filter((product) => getProductGlobalStatus(product) === statusFilter);
 
   const statusCounts = {
     published: catalog.items.filter((p) => getProductGlobalStatus(p) === 'published').length,
