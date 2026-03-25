@@ -689,7 +689,7 @@ export const ProductList: React.FC = () => {
         </div>
       ),
     },
-    ...MARKETPLACES.map((marketplace) => ({
+    ...(marketplaceFilter !== 'all' ? MARKETPLACES.filter((m) => m === marketplaceFilter) : MARKETPLACES).map((marketplace) => ({
       key: marketplace,
       header: MARKETPLACE_LABELS[marketplace],
       align: 'center' as const,
