@@ -282,6 +282,7 @@ export const ProductList: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'unpublished' | 'error'>('all');
   const [stockFilter, setStockFilter] = useState<'all' | 'with_stock' | 'no_stock'>('all');
   const [stockSort, setStockSort] = useState<'none' | 'asc' | 'desc'>('none');
+  const [marketplaceFilter, setMarketplaceFilter] = useState<string>('all');
   const [isBulkUpdateModalOpen, setIsBulkUpdateModalOpen] = useState(false);
   const [bulkUpdateMarketplaces, setBulkUpdateMarketplaces] = useState<MarketplaceKey[]>(MARKETPLACES);
 
@@ -297,6 +298,7 @@ export const ProductList: React.FC = () => {
           limit: 15,
           stockFilter: stockFilter !== 'all' ? stockFilter : undefined,
           sortBy: stockSort !== 'none' ? `stock_${stockSort}` : undefined,
+          marketplace: marketplaceFilter !== 'all' ? marketplaceFilter : undefined,
         },
       });
 
@@ -306,7 +308,7 @@ export const ProductList: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [currentPage, searchQuery, stockFilter, stockSort]);
+  }, [currentPage, searchQuery, stockFilter, stockSort, marketplaceFilter]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -318,7 +320,7 @@ export const ProductList: React.FC = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, stockFilter, stockSort]);
+  }, [searchQuery, stockFilter, stockSort, marketplaceFilter]);
 
   const toggleSkuSelection = (sku: string) => {
     setSelectedSkus((current) =>
@@ -815,6 +817,17 @@ export const ProductList: React.FC = () => {
             </button>
           ))}
         </div>
+        <div className="h-5 w-px bg-gray-200" />
+        <select
+          value={marketplaceFilter}
+          onChange={(e) => setMarketplaceFilter(e.target.value)}
+          className="rounded-full border border-gray-200 bg-white px-4 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-300"
+        >
+          <option value="all">Todos los marketplaces</option>
+          {MARKETPLACES.map((mp) => (
+            <option key={mp} value={mp}>{mp.charAt(0).toUpperCase() + mp.slice(1)}</option>
+          ))}
+        </select>
       </div>
 
       <Card className="overflow-hidden">
