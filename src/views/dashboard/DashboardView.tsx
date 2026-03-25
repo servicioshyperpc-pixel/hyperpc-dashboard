@@ -82,8 +82,15 @@ export const DashboardView: React.FC = () => {
   // Agrupar incidentes por (action + marketplace + error_type) para no contar repetidos
   const { uniqueIncidentCount, groupedIncidents } = useMemo(() => {
     const now = Date.now();
+    const INCIDENT_ACTIONS = new Set([
+      'sale_cycle_completed',
+      'cancellation_completed',
+      'stock_restore_sync_completed',
+      'stock_sync_completed',
+    ]);
     const incidentLogs = logs.filter((log) => {
       if (!log.status || !ERROR_STATUSES.has(log.status)) return false;
+      if (!INCIDENT_ACTIONS.has(log.action || '')) return false;
       if (!log.createdAt) return true;
       return now - new Date(log.createdAt).getTime() <= SEVEN_DAYS_MS;
     });
@@ -111,25 +118,25 @@ export const DashboardView: React.FC = () => {
     };
   }, [logs]);
 
-  // Actividad reciente: deduplicar polling repetido, priorizar eventos de ordenes
+  // Actividad reciente: solo eventos de negocio (ventas, cancelaciones reales, alertas de stock)
+  const BUSINESS_ACTIONS = new Set([
+    'sale_cycle_completed',
+    'cancellation_completed',
+    'stock_restore_sync_completed',
+    'out_of_stock',
+  ]);
+
   const recentActivity = useMemo(() => {
-    const sorted = [...logs].sort((a, b) => +new Date(b.createdAt || 0) - +new Date(a.createdAt || 0));
-    const result: LogEntry[] = [];
-    const seenKeys = new Set<string>();
+    const sorted = [...logs]
+      .filter((log) => {
+        if (!BUSINESS_ACTIONS.has(log.action || '')) return false;
+        // Solo mostrar cancelaciones reales (success) o que requieren revisión (warning)
+        if (log.action === 'cancellation_completed' && log.status === 'skipped') return false;
+        return true;
+      })
+      .sort((a, b) => +new Date(b.createdAt || 0) - +new Date(a.createdAt || 0));
 
-    for (const log of sorted) {
-      if (result.length >= 8) break;
-
-      // Agrupar polling repetido
-      if (log.action?.includes('polling')) {
-        const key = `${log.action}-${log.marketplace}-${log.status}`;
-        if (seenKeys.has(key)) continue;
-        seenKeys.add(key);
-      }
-
-      result.push(log);
-    }
-    return result;
+    return sorted.slice(0, 10);
   }, [logs]);
 
   // Conteos
@@ -138,7 +145,7 @@ export const DashboardView: React.FC = () => {
   [logs]);
 
   const cancellationCount = useMemo(() =>
-    logs.filter((l) => l.action === 'cancellation_completed' && (l.status === 'success' || l.status === 'skipped')).length,
+    logs.filter((l) => l.action === 'cancellation_completed' && l.status === 'success').length,
   [logs]);
 
   const cards = [
