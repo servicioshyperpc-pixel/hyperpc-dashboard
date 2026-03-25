@@ -23,7 +23,7 @@ interface LogEntry {
   duration?: number;
 }
 
-const ERROR_STATUSES = new Set(['error', 'warning', 'partial']);
+const ERROR_STATUSES = new Set(['error', 'partial']);
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 function actionLabel(action?: string): string {
