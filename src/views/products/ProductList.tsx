@@ -33,6 +33,11 @@ interface PublicationSummary {
   lastSyncedAt: string | null;
 }
 
+interface ProductAttribute {
+  attribute: string;
+  values: string[];
+}
+
 interface CatalogProduct {
   id: number;
   sku: string;
@@ -45,6 +50,7 @@ interface CatalogProduct {
   hasImage: boolean;
   imageThumbBase64?: string | null;
   productTemplateId: number | null;
+  attributes?: ProductAttribute[];
   publications: PublicationSummary[];
 }
 
@@ -58,6 +64,7 @@ interface CatalogResponse {
 
 
 interface ProductDetailResponse extends CatalogProduct {
+  attributes?: ProductAttribute[];
   marketplaceDetails: Record<
     MarketplaceKey,
     {
@@ -272,6 +279,9 @@ export const ProductList: React.FC = () => {
   const [isProductPublishModalOpen, setIsProductPublishModalOpen] = useState(false);
   const [productPublishMarketplaces, setProductPublishMarketplaces] = useState<MarketplaceKey[]>(MARKETPLACES);
   const [showAdvancedConfig, setShowAdvancedConfig] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'unpublished' | 'error'>('all');
+  const [isBulkUpdateModalOpen, setIsBulkUpdateModalOpen] = useState(false);
+  const [bulkUpdateMarketplaces, setBulkUpdateMarketplaces] = useState<MarketplaceKey[]>(MARKETPLACES);
 
   const loadCatalog = useCallback(async () => {
     setIsLoading(true);
@@ -563,6 +573,23 @@ export const ProductList: React.FC = () => {
   const totalPages = Math.max(1, Math.ceil(catalog.total / catalog.limit || 1));
   const productsWithImage = catalog.items.filter((product) => product.hasImage).length;
 
+  // Estado global del producto: publicado (al menos 1 marketplace), con error, no publicado
+  const getProductGlobalStatus = (product: CatalogProduct): 'published' | 'error' | 'unpublished' => {
+    if (product.publications.some((p) => p.status === 'error')) return 'error';
+    if (product.publications.some((p) => p.status === 'published' || p.status === 'processing')) return 'published';
+    return 'unpublished';
+  };
+
+  const filteredItems = statusFilter === 'all'
+    ? catalog.items
+    : catalog.items.filter((product) => getProductGlobalStatus(product) === statusFilter);
+
+  const statusCounts = {
+    published: catalog.items.filter((p) => getProductGlobalStatus(p) === 'published').length,
+    unpublished: catalog.items.filter((p) => getProductGlobalStatus(p) === 'unpublished').length,
+    error: catalog.items.filter((p) => getProductGlobalStatus(p) === 'error').length,
+  };
+
   const columns = [
     {
       key: 'select',
@@ -651,6 +678,9 @@ export const ProductList: React.FC = () => {
       header: MARKETPLACE_LABELS[marketplace],
       align: 'center' as const,
       render: (product: CatalogProduct) => {
+        if (product.stock === 0) {
+          return <Badge variant="error">Sin stock</Badge>;
+        }
         const publication = product.publications.find((entry) => entry.marketplace === marketplace);
         const meta = STATUS_META[publication?.status || 'missing'];
         return <Badge variant={meta.variant}>{meta.label}</Badge>;
@@ -708,10 +738,47 @@ export const ProductList: React.FC = () => {
             }}
           >
             <Rocket className="w-4 h-4" />
-            Publicación masiva
+            Crear masivo
+          </Button>
+          <Button
+            variant="secondary"
+            className="gap-2"
+            disabled={selectedSkus.length === 0}
+            onClick={() => {
+              setBulkResults([]);
+              setBulkNotice(null);
+              setBulkError(null);
+              setIsBulkUpdateModalOpen(true);
+            }}
+          >
+            <Upload className="w-4 h-4" />
+            Actualizar masivo
           </Button>
         </div>
       </Card>
+
+      {/* Filtro por estado */}
+      <div className="flex flex-wrap items-center gap-2">
+        {([
+          { key: 'all', label: 'Todos', count: catalog.items.length },
+          { key: 'published', label: 'Publicado', count: statusCounts.published },
+          { key: 'unpublished', label: 'No publicado', count: statusCounts.unpublished },
+          { key: 'error', label: 'Con error', count: statusCounts.error },
+        ] as const).map(({ key, label, count }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setStatusFilter(key)}
+            className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
+              statusFilter === key
+                ? 'bg-gray-900 text-white'
+                : 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            {label} ({count})
+          </button>
+        ))}
+      </div>
 
       <Card className="overflow-hidden">
         {loadError ? (
@@ -720,7 +787,7 @@ export const ProductList: React.FC = () => {
           <div className="py-12 text-center text-sm text-gray-500">Cargando catálogo de Odoo...</div>
         ) : (
           <>
-            <Table columns={columns} data={catalog.items} emptyMessage="No hay productos para este filtro" className="pb-3 overflow-x-scroll" />
+            <Table columns={columns} data={filteredItems} emptyMessage="No hay productos para este filtro" className="pb-3 overflow-x-scroll" />
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 sm:px-6 py-4 border-t border-gray-200">
               <p className="text-sm text-gray-600">
                 Mostrando {(catalog.page - 1) * catalog.limit + 1} a {Math.min(catalog.page * catalog.limit, catalog.total)} de {catalog.total} productos
@@ -876,6 +943,123 @@ export const ProductList: React.FC = () => {
         </>
       )}
 
+      {/* Modal actualización masiva */}
+      {isBulkUpdateModalOpen && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/35" onClick={() => setIsBulkUpdateModalOpen(false)} />
+          <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
+            <div className="flex h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-t-3xl border border-gray-200 bg-white shadow-2xl sm:h-auto sm:max-h-[90vh] sm:rounded-2xl">
+              <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.18em] text-gray-500">Actualización masiva</p>
+                  <h2 className="text-lg font-semibold text-gray-950">Actualizar productos en marketplaces</h2>
+                </div>
+                <button
+                  onClick={() => setIsBulkUpdateModalOpen(false)}
+                  className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="grid flex-1 gap-5 overflow-y-auto p-4 sm:p-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+                <div className="space-y-5">
+                  <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700 space-y-2">
+                    <p><span className="font-semibold text-gray-950">SKU seleccionados:</span> {selectedSkus.length}</p>
+                    <p><span className="font-semibold text-gray-950">Modo:</span> actualiza título, precio, stock e imagen en los marketplaces donde ya estén publicados.</p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-semibold text-gray-950 mb-3">Canales a actualizar</p>
+                    <div className="space-y-2">
+                      {MARKETPLACES.map((marketplace) => {
+                        const checked = bulkUpdateMarketplaces.includes(marketplace);
+                        return (
+                          <label key={marketplace} className="flex items-center justify-between rounded-xl border border-gray-200 px-3 py-2.5 cursor-pointer hover:border-gray-300">
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">{MARKETPLACE_LABELS[marketplace]}</p>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => setBulkUpdateMarketplaces((current) => checked ? current.filter((item) => item !== marketplace) : [...current, marketplace])}
+                              className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-500"
+                            />
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Button
+                      variant="secondary"
+                      className="gap-2"
+                      onClick={() => void runBulkAction(true, { marketplaces: bulkUpdateMarketplaces })}
+                      disabled={isBulkSubmitting || selectedSkus.length === 0 || bulkUpdateMarketplaces.length === 0}
+                    >
+                      <Search className="w-4 h-4" />
+                      Verificar
+                    </Button>
+                    <Button
+                      className="gap-2"
+                      onClick={() => void runBulkAction(false, { marketplaces: bulkUpdateMarketplaces })}
+                      disabled={isBulkSubmitting || selectedSkus.length === 0 || bulkUpdateMarketplaces.length === 0}
+                      isLoading={isBulkSubmitting}
+                    >
+                      <Upload className="w-4 h-4" />
+                      Actualizar
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="min-h-[320px] space-y-4">
+                  <div className="rounded-2xl border border-gray-200 bg-white p-4">
+                    <p className="text-sm font-semibold text-gray-950">Resultado</p>
+                    <p className="mt-1 text-xs text-gray-500">Solo actualiza productos que ya existan en el marketplace seleccionado.</p>
+                  </div>
+
+                  {bulkNotice && <div className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">{bulkNotice}</div>}
+                  {bulkError && <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{bulkError}</div>}
+
+                  <div className="rounded-2xl border border-gray-200 overflow-hidden">
+                    {bulkResults.length === 0 ? (
+                      <div className="px-4 py-12 text-center text-sm text-gray-500">
+                        Ejecuta una verificación o actualización para ver el detalle por SKU.
+                      </div>
+                    ) : (
+                      <div className="max-h-[520px] overflow-y-auto divide-y divide-gray-200">
+                        {bulkResults.map((result) => (
+                          <div key={result.sku} className="p-4 space-y-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <p className="font-mono text-sm font-semibold text-gray-950">{result.sku}</p>
+                                <p className="text-xs text-gray-500">{result.message}</p>
+                              </div>
+                              <Badge variant={result.status === 'error' ? 'error' : result.status === 'partial' ? 'warning' : 'success'}>{result.status}</Badge>
+                            </div>
+                            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                              {result.marketplaces.map((entry) => (
+                                <div key={`${result.sku}-${entry.marketplace}`} className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-sm font-medium text-gray-900">{MARKETPLACE_LABELS[entry.marketplace]}</span>
+                                    <Badge variant={entry.status === 'error' ? 'error' : entry.status === 'skipped_existing' ? 'warning' : 'info'}>{entry.status}</Badge>
+                                  </div>
+                                  <p className="mt-1 text-xs text-gray-500">{entry.message}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
       {isProductPublishModalOpen && selectedProduct && (
         <>
           <div className="fixed inset-0 z-50 bg-black/35" onClick={() => setIsProductPublishModalOpen(false)} />
@@ -987,6 +1171,19 @@ export const ProductList: React.FC = () => {
                       </div>
                     </div>
                   </div>
+
+                  {selectedProduct.attributes && selectedProduct.attributes.length > 0 && (
+                    <div className="rounded-2xl border border-gray-200 bg-white p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-gray-500 mb-3">Atributos del producto</p>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedProduct.attributes.map((attr) => (
+                          <span key={attr.attribute} className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-700">
+                            <span className="font-semibold">{attr.attribute}:</span> {attr.values.join(', ')}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <div>
                     <p className="text-xs uppercase tracking-[0.18em] text-gray-500 mb-3">Canales</p>
