@@ -280,6 +280,8 @@ export const ProductList: React.FC = () => {
   const [productPublishMarketplaces, setProductPublishMarketplaces] = useState<MarketplaceKey[]>(MARKETPLACES);
   const [showAdvancedConfig, setShowAdvancedConfig] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'unpublished' | 'error'>('all');
+  const [stockFilter, setStockFilter] = useState<'all' | 'with_stock' | 'no_stock'>('all');
+  const [stockSort, setStockSort] = useState<'none' | 'asc' | 'desc'>('none');
   const [isBulkUpdateModalOpen, setIsBulkUpdateModalOpen] = useState(false);
   const [bulkUpdateMarketplaces, setBulkUpdateMarketplaces] = useState<MarketplaceKey[]>(MARKETPLACES);
 
@@ -580,9 +582,19 @@ export const ProductList: React.FC = () => {
     return 'unpublished';
   };
 
-  const filteredItems = statusFilter === 'all'
-    ? catalog.items
-    : catalog.items.filter((product) => getProductGlobalStatus(product) === statusFilter);
+  const filteredItems = (() => {
+    let items = statusFilter === 'all'
+      ? catalog.items
+      : catalog.items.filter((product) => getProductGlobalStatus(product) === statusFilter);
+
+    if (stockFilter === 'with_stock') items = items.filter((p) => p.stock > 0);
+    if (stockFilter === 'no_stock') items = items.filter((p) => p.stock === 0);
+
+    if (stockSort === 'asc') items = [...items].sort((a, b) => a.stock - b.stock);
+    if (stockSort === 'desc') items = [...items].sort((a, b) => b.stock - a.stock);
+
+    return items;
+  })();
 
   const statusCounts = {
     published: catalog.items.filter((p) => getProductGlobalStatus(p) === 'published').length,
@@ -664,7 +676,17 @@ export const ProductList: React.FC = () => {
     },
     {
       key: 'stock',
-      header: 'Stock Odoo',
+      header: (
+        <button
+          type="button"
+          onClick={() => setStockSort((prev) => prev === 'none' ? 'desc' : prev === 'desc' ? 'asc' : 'none')}
+          className="inline-flex items-center gap-1 hover:text-gray-900"
+        >
+          Stock Odoo
+          {stockSort === 'desc' && <ChevronDown className="w-3 h-3" />}
+          {stockSort === 'asc' && <ChevronDown className="w-3 h-3 rotate-180" />}
+        </button>
+      ),
       align: 'center' as const,
       render: (product: CatalogProduct) => (
         <div className="inline-flex items-center gap-2">
@@ -757,27 +779,50 @@ export const ProductList: React.FC = () => {
         </div>
       </Card>
 
-      {/* Filtro por estado */}
-      <div className="flex flex-wrap items-center gap-2">
-        {([
-          { key: 'all', label: 'Todos', count: catalog.items.length },
-          { key: 'published', label: 'Publicado', count: statusCounts.published },
-          { key: 'unpublished', label: 'No publicado', count: statusCounts.unpublished },
-          { key: 'error', label: 'Con error', count: statusCounts.error },
-        ] as const).map(({ key, label, count }) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setStatusFilter(key)}
-            className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
-              statusFilter === key
-                ? 'bg-gray-900 text-white'
-                : 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            {label} ({count})
-          </button>
-        ))}
+      {/* Filtros */}
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex flex-wrap items-center gap-2">
+          {([
+            { key: 'all', label: 'Todos', count: catalog.items.length },
+            { key: 'published', label: 'Publicado', count: statusCounts.published },
+            { key: 'unpublished', label: 'No publicado', count: statusCounts.unpublished },
+            { key: 'error', label: 'Con error', count: statusCounts.error },
+          ] as const).map(({ key, label, count }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setStatusFilter(key)}
+              className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
+                statusFilter === key
+                  ? 'bg-gray-900 text-white'
+                  : 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {label} ({count})
+            </button>
+          ))}
+        </div>
+        <div className="h-5 w-px bg-gray-200" />
+        <div className="flex flex-wrap items-center gap-2">
+          {([
+            { key: 'all', label: 'Todo stock' },
+            { key: 'with_stock', label: 'Con stock' },
+            { key: 'no_stock', label: 'Sin stock' },
+          ] as const).map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setStockFilter(key)}
+              className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
+                stockFilter === key
+                  ? 'bg-gray-900 text-white'
+                  : 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <Card className="overflow-hidden">

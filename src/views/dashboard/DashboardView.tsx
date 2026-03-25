@@ -59,7 +59,7 @@ export const DashboardView: React.FC = () => {
     try {
       const [catalogResponse, logsResponse] = await Promise.all([
         axiosInstance.get<CatalogResponse>('/catalog/products?limit=1'),
-        axiosInstance.get<LogEntry[]>('/logs'),
+        axiosInstance.get<LogEntry[]>('/logs?flow=true'),
       ]);
 
       setCatalog({

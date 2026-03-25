@@ -139,7 +139,7 @@ export function OrdersView() {
   const loadLogs = useCallback(async () => {
     setRefreshing(true);
     try {
-      const response = await axiosInstance.get<LogEntry[]>('/logs');
+      const response = await axiosInstance.get<LogEntry[]>('/logs?flow=true');
       setLogs(Array.isArray(response.data) ? response.data : []);
     } catch {
       setLogs([]);
