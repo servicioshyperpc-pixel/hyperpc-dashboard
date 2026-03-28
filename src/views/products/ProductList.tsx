@@ -1366,7 +1366,7 @@ export const ProductList: React.FC = () => {
                       />
                     </div>
 
-                    <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="grid gap-4 sm:grid-cols-3">
                       <Input
                         label="Precio"
                         type="number"
@@ -1374,6 +1374,12 @@ export const ProductList: React.FC = () => {
                         onChange={(e) => setFormState((current) => ({ ...current, price: e.target.value }))}
                         placeholder="0"
                       />
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Precio + IVA</label>
+                        <div className="flex items-center gap-2 px-4 py-2.5 bg-green-50 border-2 border-green-200 rounded-lg text-green-700">
+                          <span className="font-semibold">{formState.price ? `$${Math.round(Number(formState.price) * 1.19).toLocaleString('es-CL')}` : '-'}</span>
+                        </div>
+                      </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Stock Odoo</label>
                         <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-2 border-gray-200 rounded-lg text-gray-900">
