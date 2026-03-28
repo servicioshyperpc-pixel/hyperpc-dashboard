@@ -700,6 +700,12 @@ export const ProductList: React.FC = () => {
       render: (product: CatalogProduct) => <span className="font-medium text-gray-900">{formatCurrency(product.price)}</span>,
     },
     {
+      key: 'priceIva',
+      header: 'Precio + IVA',
+      align: 'right' as const,
+      render: (product: CatalogProduct) => <span className="font-medium text-green-700">{formatCurrency(Math.round(product.price * 1.19))}</span>,
+    },
+    {
       key: 'stock',
       header: (
         <button
