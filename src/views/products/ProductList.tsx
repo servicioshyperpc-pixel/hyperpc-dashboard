@@ -719,12 +719,16 @@ export const ProductList: React.FC = () => {
         </button>
       ),
       align: 'center' as const,
-      render: (product: CatalogProduct) => (
-        <div className="inline-flex items-center gap-2">
-          {product.stock <= 1 && <AlertTriangle className="w-4 h-4 text-amber-500" />}
-          <span className={`font-semibold ${product.stock <= 1 ? 'text-amber-700' : 'text-gray-900'}`}>{product.stock}</span>
-        </div>
-      ),
+      render: (product: CatalogProduct) => {
+        const stockLevel = product.stock <= 1 ? 'critical' : product.stock < 5 ? 'low' : 'ok';
+        const tooltip = stockLevel === 'critical' ? 'Stock crítico' : stockLevel === 'low' ? 'Stock bajo' : '';
+        return (
+          <div className="inline-flex items-center gap-2" title={tooltip}>
+            {stockLevel !== 'ok' && <AlertTriangle className={`w-4 h-4 ${stockLevel === 'critical' ? 'text-red-500' : 'text-amber-500'}`} />}
+            <span className={`font-semibold ${stockLevel === 'critical' ? 'text-red-700' : stockLevel === 'low' ? 'text-amber-700' : 'text-gray-900'}`}>{product.stock}</span>
+          </div>
+        );
+      },
     },
     ...(marketplaceFilter !== 'all' ? MARKETPLACES.filter((m) => m === marketplaceFilter) : MARKETPLACES).map((marketplace) => ({
       key: marketplace,
