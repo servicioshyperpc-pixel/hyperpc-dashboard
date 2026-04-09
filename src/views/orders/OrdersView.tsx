@@ -121,7 +121,9 @@ function friendlyError(log: LogEntry): string {
   if (str === '-') return str;
   if (str.includes('timeout')) return `Timeout de ${log.marketplace || 'API'}`;
   if (str.includes('available_quantity')) return 'MeLi multi-warehouse';
-  if (str.includes('Insufficient stock')) return 'Sin stock en Odoo';
+  if (str.includes('Insufficient stock') || str.includes('Stock insuficiente')) return 'Sin stock en Odoo';
+  if (str.includes('no tiene stock registrado')) return 'Producto sin inventario en Odoo';
+  if (str.includes('no existe en Odoo')) return 'SKU no existe en Odoo';
   if (str.includes('500')) return `Error 500 de ${log.marketplace || 'API'}`;
   if (str.includes('requires_manual_review')) return 'Requiere revision manual';
   if (str.length > 80) return str.substring(0, 77) + '...';

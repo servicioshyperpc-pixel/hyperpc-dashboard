@@ -694,16 +694,10 @@ export const ProductList: React.FC = () => {
       ),
     },
     {
-      key: 'price',
-      header: 'Precio Base',
-      align: 'right' as const,
-      render: (product: CatalogProduct) => <span className="font-medium text-gray-900">{formatCurrency(product.price)}</span>,
-    },
-    {
       key: 'priceIva',
       header: 'Precio + IVA',
       align: 'right' as const,
-      render: (product: CatalogProduct) => <span className="font-medium text-green-700">{formatCurrency(Math.round(product.price * 1.19))}</span>,
+      render: (product: CatalogProduct) => <span className="font-medium text-green-700">{formatCurrency(product.price)}</span>,
     },
     {
       key: 'stock',
@@ -1267,7 +1261,7 @@ export const ProductList: React.FC = () => {
                         <p className="font-semibold text-gray-950">{selectedProduct.name}</p>
                         <p className="text-sm text-gray-500 mt-1">{selectedProduct.sku} · {selectedProduct.category || 'Sin categoría'}</p>
                         <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-600">
-                          <span className="rounded-full bg-white border border-gray-200 px-2.5 py-1">Base: {formatCurrency(selectedProduct.price)}</span>
+                          <span className="rounded-full bg-white border border-gray-200 px-2.5 py-1">Precio: {formatCurrency(selectedProduct.price)}</span>
                           <span className="rounded-full bg-white border border-gray-200 px-2.5 py-1">Stock: {selectedProduct.stock}</span>
                           <span className={`rounded-full px-2.5 py-1 ${selectedProduct.hasImage ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700'}`}>
                             {selectedProduct.hasImage ? 'Odoo trae foto' : 'Sin foto en Odoo'}
@@ -1370,18 +1364,11 @@ export const ProductList: React.FC = () => {
                       />
                     </div>
 
-                    <div className="grid gap-4 sm:grid-cols-3">
-                      <Input
-                        label="Precio"
-                        type="number"
-                        value={formState.price}
-                        onChange={(e) => setFormState((current) => ({ ...current, price: e.target.value }))}
-                        placeholder="0"
-                      />
+                    <div className="grid gap-4 sm:grid-cols-2">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Precio + IVA</label>
                         <div className="flex items-center gap-2 px-4 py-2.5 bg-green-50 border-2 border-green-200 rounded-lg text-green-700">
-                          <span className="font-semibold">{formState.price ? `$${Math.round(Number(formState.price) * 1.19).toLocaleString('es-CL')}` : '-'}</span>
+                          <span className="font-semibold">{formState.price ? `$${Math.round(Number(formState.price)).toLocaleString('es-CL')}` : '-'}</span>
                         </div>
                       </div>
                       <div>
