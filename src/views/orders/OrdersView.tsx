@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Card } from '../../core/components/Card';
 import { Badge } from '../../core/components/Badge';
 import { Table } from '../../core/components/Table';
@@ -135,6 +135,7 @@ export function OrdersView() {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [filterMarketplace, setFilterMarketplace] = useState<string>('all');
+  const flowRef = useRef<HTMLDivElement>(null);
 
   const loadLogs = useCallback(async () => {
     setRefreshing(true);
@@ -227,6 +228,13 @@ export function OrdersView() {
       mounted = false;
     };
   }, [selectedOrderId]);
+
+  // Scroll al panel del flujo cuando se carga
+  useEffect(() => {
+    if (selectedOrderId && !loadingDetail && selectedLogs.length > 0 && flowRef.current) {
+      flowRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [selectedOrderId, loadingDetail, selectedLogs]);
 
   const salesCount = rows.filter((r) => !r.isCancellation).length;
   const cancellationCount = rows.filter((r) => r.isCancellation).length;
@@ -379,6 +387,7 @@ export function OrdersView() {
 
       {/* Order detail panel */}
       {selectedOrderId && (
+        <div ref={flowRef}>
         <Card bodyClassName="space-y-5">
           <div className="flex items-center justify-between gap-4">
             <div>
@@ -594,6 +603,7 @@ export function OrdersView() {
             </>
           )}
         </Card>
+        </div>
       )}
     </div>
   );
