@@ -145,12 +145,16 @@ const VALIDATION_META: Record<
   unknown: { label: 'Sin verificar', variant: 'default', helper: 'Todavía no se evaluó este canal en forma real.' },
 };
 
+const IVA_RATE = 1.19;
+
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat('es-CL', {
     style: 'currency',
     currency: 'CLP',
     minimumFractionDigits: 0,
   }).format(amount || 0);
+
+const priceWithIva = (price: number) => Math.round((price || 0) * IVA_RATE);
 
 const parseLinesToAttributes = (value: string) =>
   value
@@ -379,7 +383,7 @@ export const ProductList: React.FC = () => {
     setFormState({
       title: detail.title || product.name,
       description: detail.description || product.description || '',
-      price: detail.price !== null ? String(detail.price) : String(product.price || ''),
+      price: detail.price !== null ? String(priceWithIva(detail.price)) : String(priceWithIva(product.price)),
       status: detail.status || 'draft',
       imageUrl: detail.imageUrl || configuration.imageUrl || '',
       falabellaPrimaryCategory: String(configuration.primaryCategory || ''),
@@ -528,7 +532,7 @@ export const ProductList: React.FC = () => {
       await axiosInstance.put(`/catalog/products/${selectedProduct.sku}/marketplaces/${selectedMarketplace}`, {
         title: formState.title.trim(),
         description: formState.description.trim(),
-        price: Number(formState.price),
+        price: Math.round(Number(formState.price) / IVA_RATE),
         status: formState.status,
         imageUrl: formState.imageUrl.trim() || undefined,
         payload: Object.keys(payload).length ? payload : undefined,
@@ -697,7 +701,7 @@ export const ProductList: React.FC = () => {
       key: 'priceIva',
       header: 'Precio + IVA',
       align: 'right' as const,
-      render: (product: CatalogProduct) => <span className="font-medium text-green-700">{formatCurrency(product.price)}</span>,
+      render: (product: CatalogProduct) => <span className="font-medium text-green-700">{formatCurrency(priceWithIva(product.price))}</span>,
     },
     {
       key: 'stock',
