@@ -734,16 +734,23 @@ export const ProductList: React.FC = () => {
       align: 'center' as const,
       render: (product: CatalogProduct) => {
         const publication = product.publications.find((entry) => entry.marketplace === marketplace);
-        if (product.stock === 0) {
-          return <Badge variant="error">Sin stock</Badge>;
-        }
+
+        let statusBadge: React.ReactNode;
         if (!publication?.lastSyncedAt) {
           const meta = STATUS_META[publication?.status || 'missing'];
-          return <Badge variant={meta.variant}>{meta.label}</Badge>;
+          statusBadge = <Badge variant={meta.variant}>{meta.label}</Badge>;
+        } else {
+          statusBadge = publication.existsInMarketplace
+            ? <Badge variant="success">Publicado</Badge>
+            : <Badge variant="error">No publicado</Badge>;
         }
-        return publication.existsInMarketplace
-          ? <Badge variant="success">Publicado</Badge>
-          : <Badge variant="error">No publicado</Badge>;
+
+        return (
+          <div className="flex flex-col items-center gap-1">
+            {statusBadge}
+            {product.stock === 0 && <Badge variant="warning">Sin stock</Badge>}
+          </div>
+        );
       },
     })),
     {
