@@ -259,7 +259,7 @@ export const ProductList: React.FC = () => {
   const [catalog, setCatalog] = useState<CatalogResponse>({
     items: [],
     page: 1,
-    limit: 100,
+    limit: 20,
     total: 0,
     marketplaces: MARKETPLACES,
   });
@@ -301,7 +301,7 @@ export const ProductList: React.FC = () => {
         params: {
           search: searchQuery || undefined,
           page: currentPage,
-          limit: 100,
+          limit: 20,
           stockFilter: stockFilter !== 'all' ? stockFilter : undefined,
           sortBy: stockSort !== 'none' ? `stock_${stockSort}` : undefined,
         },
