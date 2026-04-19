@@ -97,6 +97,13 @@ interface BulkMarketplaceResult {
   operation: 'create' | 'update';
   status: string;
   message: string;
+  payload?: {
+    missingFields?: string[];
+    externalProductId?: string | null;
+    existsInMarketplace?: boolean;
+    currentStatus?: string;
+    checkedWith?: 'api' | 'local';
+  };
 }
 
 interface BulkPublishSkuResult {
@@ -284,6 +291,7 @@ export const ProductList: React.FC = () => {
   const [isProductPublishModalOpen, setIsProductPublishModalOpen] = useState(false);
   const [productPublishMarketplaces, setProductPublishMarketplaces] = useState<MarketplaceKey[]>(MARKETPLACES);
   const [showAdvancedConfig, setShowAdvancedConfig] = useState(false);
+  const [bulkForceUpdate, setBulkForceUpdate] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'unpublished' | 'error'>('all');
   const [stockFilter, setStockFilter] = useState<'all' | 'with_stock' | 'no_stock'>('all');
   const [stockSort, setStockSort] = useState<'none' | 'asc' | 'desc'>('none');
@@ -431,6 +439,9 @@ export const ProductList: React.FC = () => {
       setSelectedProduct(data);
       setSelectedMarketplace(marketplace);
       syncFormWithSelection(data, marketplace);
+
+      const missing = data.marketplaceDetails[marketplace]?.validation?.missingFields?.length || 0;
+      if (missing > 0) setShowAdvancedConfig(true);
     } catch (error: any) {
       setDetailError(error.response?.data?.message || error.message || 'No se pudo cargar el detalle del producto');
     } finally {
@@ -445,6 +456,9 @@ export const ProductList: React.FC = () => {
 
     setSelectedMarketplace(marketplace);
     syncFormWithSelection(selectedProduct, marketplace);
+
+    const missing = selectedProduct.marketplaceDetails[marketplace]?.validation?.missingFields?.length || 0;
+    if (missing > 0) setShowAdvancedConfig(true);
   };
 
   const handleSaveDraft = async () => {
@@ -569,9 +583,10 @@ export const ProductList: React.FC = () => {
     }
   };
 
-  const runBulkAction = async (dryRun: boolean, options?: { skus?: string[]; marketplaces?: MarketplaceKey[] }) => {
+  const runBulkAction = async (dryRun: boolean, options?: { skus?: string[]; marketplaces?: MarketplaceKey[]; forceUpdate?: boolean }) => {
     const targetSkus = options?.skus?.length ? options.skus : selectedSkus;
     const targetMarketplaces = options?.marketplaces?.length ? options.marketplaces : bulkMarketplaces;
+    const skipExisting = options?.forceUpdate ? false : !bulkForceUpdate;
 
     if (targetSkus.length === 0 || targetMarketplaces.length === 0) {
       return;
@@ -589,7 +604,7 @@ export const ProductList: React.FC = () => {
           marketplaces: targetMarketplaces,
           batchSize: bulkBatchSize,
           dryRun,
-          skipExisting: true,
+          skipExisting,
         },
         { timeout: 120000 },
       );
@@ -945,7 +960,12 @@ export const ProductList: React.FC = () => {
                 <div className="space-y-5">
                   <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700 space-y-2">
                     <p><span className="font-semibold text-gray-950">SKU seleccionados:</span> {selectedSkus.length}</p>
-                    <p><span className="font-semibold text-gray-950">Modo:</span> validar o publicar solo los que no existan ya en el canal.</p>
+                    <p>
+                      <span className="font-semibold text-gray-950">Modo:</span>{' '}
+                      {bulkForceUpdate
+                        ? 'publicar/actualizar TODOS los SKUs (incluye los que ya existen).'
+                        : 'solo publicar los que no existan ya en el canal (los existentes se saltan).'}
+                    </p>
                     <p><span className="font-semibold text-gray-950">Lote:</span> el backend procesa por tandas para no saturar los marketplaces.</p>
                   </div>
 
@@ -982,6 +1002,19 @@ export const ProductList: React.FC = () => {
                     />
                     <p className="mt-1 text-xs text-gray-500">Recomendado: 50. Máximo permitido: 100.</p>
                   </div>
+
+                  <label className="flex items-start gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2.5 cursor-pointer hover:border-gray-300">
+                    <input
+                      type="checkbox"
+                      checked={bulkForceUpdate}
+                      onChange={(e) => setBulkForceUpdate(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-500"
+                    />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900">Forzar actualización</p>
+                      <p className="text-xs text-gray-500">Re-publica también los SKUs que ya existen en el marketplace (equivale a update).</p>
+                    </div>
+                  </label>
 
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Button
@@ -1031,15 +1064,43 @@ export const ProductList: React.FC = () => {
                               <Badge variant={result.status === 'error' ? 'error' : result.status === 'partial' ? 'warning' : 'success'}>{result.status}</Badge>
                             </div>
                             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                              {result.marketplaces.map((entry) => (
-                                <div key={`${result.sku}-${entry.marketplace}`} className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <span className="text-sm font-medium text-gray-900">{MARKETPLACE_LABELS[entry.marketplace]}</span>
-                                    <Badge variant={entry.status === 'error' ? 'error' : entry.status === 'skipped_existing' ? 'warning' : 'info'}>{entry.status}</Badge>
+                              {result.marketplaces.map((entry) => {
+                                const missing = entry.payload?.missingFields || [];
+                                return (
+                                  <div key={`${result.sku}-${entry.marketplace}`} className="min-w-0 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="truncate text-sm font-medium text-gray-900">{MARKETPLACE_LABELS[entry.marketplace]}</span>
+                                      <Badge variant={entry.status === 'error' ? 'error' : entry.status === 'skipped_existing' ? 'warning' : 'info'}>{entry.status}</Badge>
+                                    </div>
+                                    {missing.length > 0 ? (
+                                      <div className="mt-2 space-y-1.5">
+                                        <p className="text-xs font-medium text-amber-700">Faltan:</p>
+                                        <div className="flex flex-wrap gap-1">
+                                          {missing.map((field) => (
+                                            <span key={field} className="break-words rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                                              {friendlyFieldName(field)}
+                                            </span>
+                                          ))}
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setIsBulkModalOpen(false);
+                                            setIsBulkUpdateModalOpen(false);
+                                            setIsProductPublishModalOpen(false);
+                                            void loadProductDetail(result.sku, entry.marketplace);
+                                          }}
+                                          className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-gray-700 underline-offset-2 hover:underline"
+                                        >
+                                          <Settings className="h-3 w-3" /> Configurar {MARKETPLACE_LABELS[entry.marketplace]}
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <p className="mt-1 whitespace-normal break-words text-xs text-gray-500">{entry.message}</p>
+                                    )}
                                   </div>
-                                  <p className="mt-1 text-xs text-gray-500">{entry.message}</p>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </div>
                         ))}
@@ -1148,15 +1209,43 @@ export const ProductList: React.FC = () => {
                               <Badge variant={result.status === 'error' ? 'error' : result.status === 'partial' ? 'warning' : 'success'}>{result.status}</Badge>
                             </div>
                             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                              {result.marketplaces.map((entry) => (
-                                <div key={`${result.sku}-${entry.marketplace}`} className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <span className="text-sm font-medium text-gray-900">{MARKETPLACE_LABELS[entry.marketplace]}</span>
-                                    <Badge variant={entry.status === 'error' ? 'error' : entry.status === 'skipped_existing' ? 'warning' : 'info'}>{entry.status}</Badge>
+                              {result.marketplaces.map((entry) => {
+                                const missing = entry.payload?.missingFields || [];
+                                return (
+                                  <div key={`${result.sku}-${entry.marketplace}`} className="min-w-0 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="truncate text-sm font-medium text-gray-900">{MARKETPLACE_LABELS[entry.marketplace]}</span>
+                                      <Badge variant={entry.status === 'error' ? 'error' : entry.status === 'skipped_existing' ? 'warning' : 'info'}>{entry.status}</Badge>
+                                    </div>
+                                    {missing.length > 0 ? (
+                                      <div className="mt-2 space-y-1.5">
+                                        <p className="text-xs font-medium text-amber-700">Faltan:</p>
+                                        <div className="flex flex-wrap gap-1">
+                                          {missing.map((field) => (
+                                            <span key={field} className="break-words rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                                              {friendlyFieldName(field)}
+                                            </span>
+                                          ))}
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setIsBulkModalOpen(false);
+                                            setIsBulkUpdateModalOpen(false);
+                                            setIsProductPublishModalOpen(false);
+                                            void loadProductDetail(result.sku, entry.marketplace);
+                                          }}
+                                          className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-gray-700 underline-offset-2 hover:underline"
+                                        >
+                                          <Settings className="h-3 w-3" /> Configurar {MARKETPLACE_LABELS[entry.marketplace]}
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <p className="mt-1 whitespace-normal break-words text-xs text-gray-500">{entry.message}</p>
+                                    )}
                                   </div>
-                                  <p className="mt-1 text-xs text-gray-500">{entry.message}</p>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </div>
                         ))}
