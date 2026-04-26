@@ -303,7 +303,7 @@ export const ProductList: React.FC = () => {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importSkus, setImportSkus] = useState('');
   const [importDryRun, setImportDryRun] = useState(true);
-  const [importMarketplace, setImportMarketplace] = useState<'paris' | 'mercadolibre'>('paris');
+  const [importMarketplace, setImportMarketplace] = useState<'paris' | 'mercadolibre' | 'ripley'>('paris');
   const [importValidate, setImportValidate] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importResult, setImportResult] = useState<{
@@ -1916,40 +1916,24 @@ export const ProductList: React.FC = () => {
 
             <div className="space-y-4 px-5 py-4">
               <p className="text-sm text-gray-600">
-                {importMarketplace === 'paris' ? (
-                  <>
-                    Sube el Excel maestro. Se leerá la hoja <strong>"Paris editar"</strong> y se
-                    actualizarán los <em>payloads</em> de publicación en Paris para cada SKU.
-                  </>
-                ) : (
-                  <>
-                    Sube el Excel de MercadoLibre. Se leerá la hoja <strong>"Computadores"</strong> y se
-                    actualizarán los <em>payloads</em> de publicación en MercadoLibre para cada SKU.
-                  </>
-                )}
+                Sube el Excel maestro <strong>Lista de precios HyperPC.xlsx</strong>. Cada marketplace lee su propia hoja:
+                Paris → <strong>"Paris editar"</strong>, MercadoLibre → <strong>"Computadores"</strong>, Ripley → <strong>"Ripley"</strong>.
               </p>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Marketplace
                 </label>
-                <div className="flex gap-2">
-                  {(['paris', 'mercadolibre'] as const).map((mp) => (
-                    <button
-                      key={mp}
-                      type="button"
-                      onClick={() => setImportMarketplace(mp)}
-                      disabled={isImporting}
-                      className={`rounded-md border px-3 py-1.5 text-sm ${
-                        importMarketplace === mp
-                          ? 'border-gray-900 bg-gray-900 text-white'
-                          : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
-                      }`}
-                    >
-                      {mp === 'paris' ? 'Paris' : 'MercadoLibre'}
-                    </button>
-                  ))}
-                </div>
+                <select
+                  value={importMarketplace}
+                  onChange={(e) => setImportMarketplace(e.target.value as 'paris' | 'mercadolibre' | 'ripley')}
+                  disabled={isImporting}
+                  className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-gray-900 focus:outline-none disabled:opacity-50"
+                >
+                  <option value="paris">Paris</option>
+                  <option value="mercadolibre">MercadoLibre</option>
+                  <option value="ripley">Ripley</option>
+                </select>
               </div>
 
               <div>
