@@ -142,6 +142,20 @@ const STATUS_META: Record<PublicationStatus, { label: string; variant: 'success'
   disabled: { label: 'Deshabilitado', variant: 'default', helper: 'Este canal no se usará para el SKU.' },
 };
 
+const getEffectiveStatusMeta = (publication: {
+  status: PublicationStatus;
+  existsInMarketplace: boolean;
+  lastSyncedAt: string | null;
+}) => {
+  if (!publication.lastSyncedAt) return STATUS_META[publication.status];
+  if (publication.existsInMarketplace) return STATUS_META.published;
+  return {
+    label: 'No publicado',
+    variant: 'error' as const,
+    helper: 'La última verificación no encontró el producto en el marketplace.',
+  };
+};
+
 const VALIDATION_META: Record<
   'ready' | 'missing_data' | 'exists' | 'unknown',
   { label: string; variant: 'success' | 'error' | 'warning' | 'default'; helper: string }
@@ -316,37 +330,6 @@ export const ProductList: React.FC = () => {
   } | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
 
-  const handleImportExcel = useCallback(async () => {
-    if (!importFile) return;
-    setIsImporting(true);
-    setImportError(null);
-    setImportResult(null);
-    try {
-      const form = new FormData();
-      form.append('file', importFile);
-      const params = new URLSearchParams({ marketplace: importMarketplace });
-      if (importDryRun) params.set('dryRun', 'true');
-      if (importMarketplace === 'mercadolibre' && importValidate) {
-        params.set('validate', 'true');
-      }
-      const skusClean = importSkus.trim();
-      if (skusClean) params.set('skus', skusClean);
-      const { data } = await axiosInstance.post(
-        `/catalog/import-excel?${params.toString()}`,
-        form,
-        { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 300000 },
-      );
-      setImportResult(data);
-      if (!importDryRun && data.imported > 0) {
-        void loadCatalog();
-      }
-    } catch (err: any) {
-      setImportError(err?.response?.data?.message || err?.message || 'Error al importar');
-    } finally {
-      setIsImporting(false);
-    }
-  }, [importFile, importSkus, importDryRun, importMarketplace, importValidate]);
-
   const loadCatalog = useCallback(async () => {
     setIsLoading(true);
     setLoadError(null);
@@ -495,6 +478,50 @@ export const ProductList: React.FC = () => {
       setIsDetailLoading(false);
     }
   }, [selectedMarketplace, syncFormWithSelection]);
+
+  const handleImportExcel = useCallback(async () => {
+    if (!importFile) return;
+    setIsImporting(true);
+    setImportError(null);
+    setImportResult(null);
+    try {
+      const form = new FormData();
+      form.append('file', importFile);
+      const params = new URLSearchParams({ marketplace: importMarketplace });
+      if (importDryRun) params.set('dryRun', 'true');
+      if (importMarketplace === 'mercadolibre' && importValidate) {
+        params.set('validate', 'true');
+      }
+      const skusClean = importSkus.trim();
+      if (skusClean) params.set('skus', skusClean);
+      const { data } = await axiosInstance.post(
+        `/catalog/import-excel?${params.toString()}`,
+        form,
+        { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 300000 },
+      );
+      setImportResult(data);
+      if (!importDryRun && data.imported > 0) {
+        await loadCatalog();
+        if (selectedProduct) {
+          await loadProductDetail(selectedProduct.sku, selectedMarketplace);
+        }
+      }
+    } catch (err: any) {
+      setImportError(err?.response?.data?.message || err?.message || 'Error al importar');
+    } finally {
+      setIsImporting(false);
+    }
+  }, [
+    importFile,
+    importSkus,
+    importDryRun,
+    importMarketplace,
+    importValidate,
+    loadCatalog,
+    loadProductDetail,
+    selectedMarketplace,
+    selectedProduct,
+  ]);
 
   const handleMarketplaceSelect = (marketplace: MarketplaceKey) => {
     if (!selectedProduct) {
@@ -796,20 +823,13 @@ export const ProductList: React.FC = () => {
       align: 'center' as const,
       render: (product: CatalogProduct) => {
         const publication = product.publications.find((entry) => entry.marketplace === marketplace);
-
-        let statusBadge: React.ReactNode;
-        if (!publication?.lastSyncedAt) {
-          const meta = STATUS_META[publication?.status || 'missing'];
-          statusBadge = <Badge variant={meta.variant}>{meta.label}</Badge>;
-        } else {
-          statusBadge = publication.existsInMarketplace
-            ? <Badge variant="success">Publicado</Badge>
-            : <Badge variant="error">No publicado</Badge>;
-        }
+        const meta = publication
+          ? getEffectiveStatusMeta(publication)
+          : STATUS_META.missing;
 
         return (
           <div className="flex flex-col items-center gap-1">
-            {statusBadge}
+            <Badge variant={meta.variant}>{meta.label}</Badge>
             {product.stock === 0 && <Badge variant="warning">Sin stock</Badge>}
           </div>
         );
@@ -1451,7 +1471,7 @@ export const ProductList: React.FC = () => {
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       {MARKETPLACES.map((marketplace) => {
                         const detail = selectedProduct.marketplaceDetails[marketplace];
-                        const status = STATUS_META[detail.status];
+                        const status = getEffectiveStatusMeta(detail);
                         const validation = VALIDATION_META[detail.validation?.status || 'unknown'];
                         const isSelected = selectedMarketplace === marketplace;
                         const actionLabel = detail.existsInMarketplace || detail.externalProductId ? 'Editar' : 'Crear';
@@ -1488,8 +1508,8 @@ export const ProductList: React.FC = () => {
                             : 'Completa los datos y publica en este canal'}
                         </p>
                       </div>
-                      <Badge variant={STATUS_META[selectedProduct.marketplaceDetails[selectedMarketplace].status].variant}>
-                        {STATUS_META[selectedProduct.marketplaceDetails[selectedMarketplace].status].label}
+                      <Badge variant={getEffectiveStatusMeta(selectedProduct.marketplaceDetails[selectedMarketplace]).variant}>
+                        {getEffectiveStatusMeta(selectedProduct.marketplaceDetails[selectedMarketplace]).label}
                       </Badge>
                     </div>
 
@@ -1778,14 +1798,14 @@ export const ProductList: React.FC = () => {
                           label="Código de categoría"
                           value={formState.ripleyCategoryCode}
                           onChange={(e) => setFormState((current) => ({ ...current, ripleyCategoryCode: e.target.value }))}
-                          placeholder="FO_MP"
+                          placeholder="Ej: FO_MP"
                         />
 
                         <Input
                           label="Marca"
                           value={formState.ripleyBrand}
                           onChange={(e) => setFormState((current) => ({ ...current, ripleyBrand: e.target.value }))}
-                          placeholder="HyperPC"
+                          placeholder="Ej: HyperPC"
                         />
 
                         <Input
