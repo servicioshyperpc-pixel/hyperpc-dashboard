@@ -145,16 +145,34 @@ const STATUS_META: Record<PublicationStatus, { label: string; variant: 'success'
 const getEffectiveStatusMeta = (publication: {
   status: PublicationStatus;
   existsInMarketplace: boolean;
+  externalProductId?: string | null;
   lastSyncedAt: string | null;
 }) => {
+  if (
+    publication.existsInMarketplace ||
+    publication.externalProductId ||
+    publication.status === 'published'
+  ) {
+    return STATUS_META.published;
+  }
   if (!publication.lastSyncedAt) return STATUS_META[publication.status];
-  if (publication.existsInMarketplace) return STATUS_META.published;
   return {
     label: 'No publicado',
     variant: 'error' as const,
     helper: 'La última verificación no encontró el producto en el marketplace.',
   };
 };
+
+const isMarketplacePublished = (publication: {
+  status: PublicationStatus;
+  existsInMarketplace: boolean;
+  externalProductId?: string | null;
+  validation?: { status: 'ready' | 'missing_data' | 'exists' | 'unknown' };
+}) =>
+  publication.existsInMarketplace ||
+  Boolean(publication.externalProductId) ||
+  publication.status === 'published' ||
+  publication.validation?.status === 'exists';
 
 const VALIDATION_META: Record<
   'ready' | 'missing_data' | 'exists' | 'unknown',
@@ -317,7 +335,7 @@ export const ProductList: React.FC = () => {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importSkus, setImportSkus] = useState('');
   const [importDryRun, setImportDryRun] = useState(true);
-  const [importMarketplace, setImportMarketplace] = useState<'paris' | 'mercadolibre' | 'ripley'>('paris');
+  const [importMarketplace, setImportMarketplace] = useState<'paris' | 'mercadolibre' | 'ripley' | 'falabella'>('paris');
   const [importValidate, setImportValidate] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importResult, setImportResult] = useState<{
@@ -638,6 +656,10 @@ export const ProductList: React.FC = () => {
 
   const handlePublishChannel = async () => {
     if (!selectedProduct) {
+      return;
+    }
+    if (isMarketplacePublished(selectedProduct.marketplaceDetails[selectedMarketplace])) {
+      setDetailNotice('Este canal ya está publicado. Puedes editar datos y guardar cambios, pero no volver a publicarlo desde aquí.');
       return;
     }
 
@@ -1367,16 +1389,32 @@ export const ProductList: React.FC = () => {
                 <div className="grid gap-2 sm:grid-cols-2">
                   {MARKETPLACES.map((marketplace) => {
                     const checked = productPublishMarketplaces.includes(marketplace);
+                    const published = isMarketplacePublished(selectedProduct.marketplaceDetails[marketplace]);
                     return (
-                      <label key={marketplace} className="flex items-center justify-between rounded-xl border border-gray-200 px-3 py-3 cursor-pointer hover:border-gray-300">
+                      <label
+                        key={marketplace}
+                        className={`flex items-center justify-between rounded-xl border px-3 py-3 ${
+                          published
+                            ? 'cursor-not-allowed border-gray-100 bg-gray-50 opacity-70'
+                            : 'cursor-pointer border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
                         <div>
                           <p className="text-sm font-medium text-gray-900">{MARKETPLACE_LABELS[marketplace]}</p>
-                          <p className="text-xs text-gray-500">Usará el borrador/configuración guardada de ese canal.</p>
+                          <p className="text-xs text-gray-500">
+                            {published
+                              ? 'Ya publicado; se omite para evitar republicar.'
+                              : 'Usará el borrador/configuración guardada de ese canal.'}
+                          </p>
                         </div>
                         <input
                           type="checkbox"
                           checked={checked}
-                          onChange={() => setProductPublishMarketplaces((current) => checked ? current.filter((item) => item !== marketplace) : [...current, marketplace])}
+                          disabled={published}
+                          onChange={() => {
+                            if (published) return;
+                            setProductPublishMarketplaces((current) => checked ? current.filter((item) => item !== marketplace) : [...current, marketplace]);
+                          }}
                           className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-500"
                         />
                       </label>
@@ -1865,25 +1903,30 @@ export const ProductList: React.FC = () => {
                     {/* Fin configuracion avanzada */}
 
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <button
-                        onClick={() => void handlePublishChannel()}
-                        disabled={
-                          isPublishing ||
-                          isSaving ||
-                          selectedProduct.marketplaceDetails[selectedMarketplace].validation?.status === 'missing_data'
-                        }
-                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <Upload className="w-4 h-4" />
-                        {isPublishing
-                          ? 'Preparando...'
-                          : selectedProduct.marketplaceDetails[selectedMarketplace].validation?.status === 'exists'
-                            ? 'Actualizar este canal'
-                            : 'Publicar este canal'}
-                      </button>
+                      {(() => {
+                        const currentDetail = selectedProduct.marketplaceDetails[selectedMarketplace];
+                        const published = isMarketplacePublished(currentDetail);
+                        const missingData = currentDetail.validation?.status === 'missing_data';
+
+                        return (
+                          <button
+                            onClick={() => void handlePublishChannel()}
+                            disabled={isPublishing || isSaving || published || missingData}
+                            title={published ? 'Este canal ya está publicado' : undefined}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <Upload className="w-4 h-4" />
+                            {isPublishing ? 'Preparando...' : published ? 'Ya publicado' : 'Publicar este canal'}
+                          </button>
+                        );
+                      })()}
                       <button
                         onClick={() => {
-                          setProductPublishMarketplaces(MARKETPLACES);
+                          setProductPublishMarketplaces(
+                            MARKETPLACES.filter((marketplace) =>
+                              !isMarketplacePublished(selectedProduct.marketplaceDetails[marketplace]),
+                            ),
+                          );
                           setBulkResults([]);
                           setBulkNotice(null);
                           setBulkError(null);
@@ -1937,7 +1980,7 @@ export const ProductList: React.FC = () => {
             <div className="flex-1 overflow-y-auto space-y-4 px-5 py-4">
               <p className="text-sm text-gray-600">
                 Sube el Excel maestro <strong>Lista de precios HyperPC.xlsx</strong>. Cada marketplace lee su propia hoja:
-                Paris → <strong>"Paris editar"</strong>, MercadoLibre → <strong>"Computadores"</strong>, Ripley → <strong>"Ripley"</strong>.
+                Paris → <strong>"Paris editar"</strong>, MercadoLibre → <strong>"Computadores"</strong>, Ripley → <strong>"Ripley"</strong>, Falabella → <strong>"Falabella"</strong>.
               </p>
 
               <div>
@@ -1946,13 +1989,14 @@ export const ProductList: React.FC = () => {
                 </label>
                 <select
                   value={importMarketplace}
-                  onChange={(e) => setImportMarketplace(e.target.value as 'paris' | 'mercadolibre' | 'ripley')}
+                  onChange={(e) => setImportMarketplace(e.target.value as 'paris' | 'mercadolibre' | 'ripley' | 'falabella')}
                   disabled={isImporting}
                   className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-gray-900 focus:outline-none disabled:opacity-50"
                 >
                   <option value="paris">Paris</option>
                   <option value="mercadolibre">MercadoLibre</option>
                   <option value="ripley">Ripley</option>
+                  <option value="falabella">Falabella</option>
                 </select>
               </div>
 
@@ -1991,7 +2035,7 @@ export const ProductList: React.FC = () => {
                   onChange={(e) => setImportDryRun(e.target.checked)}
                   disabled={isImporting}
                 />
-                Dry run (no guarda en base de datos — solo valida el mapeo)
+                Dry run (prellena la ficha local sin publicar en el marketplace)
               </label>
 
               {importMarketplace === 'mercadolibre' && (
