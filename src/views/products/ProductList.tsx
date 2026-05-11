@@ -10,7 +10,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Eye,
   Image as ImageIcon,
   Pencil,
   RefreshCw,
@@ -185,6 +184,8 @@ const VALIDATION_META: Record<
 };
 
 const IVA_RATE = 1.19;
+const CATALOG_PAGE_SIZE = 100;
+const MARKETPLACE_STATUS_SYNC_LIMIT = 20;
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat('es-CL', {
@@ -298,7 +299,7 @@ export const ProductList: React.FC = () => {
   const [catalog, setCatalog] = useState<CatalogResponse>({
     items: [],
     page: 1,
-    limit: 20,
+    limit: CATALOG_PAGE_SIZE,
     total: 0,
     marketplaces: MARKETPLACES,
   });
@@ -328,7 +329,10 @@ export const ProductList: React.FC = () => {
   const [stockFilter, setStockFilter] = useState<'all' | 'with_stock' | 'no_stock'>('all');
   const [stockSort, setStockSort] = useState<'none' | 'asc' | 'desc'>('none');
   const [marketplaceFilter, setMarketplaceFilter] = useState<string>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isFalabellaCatalogSyncing, setIsFalabellaCatalogSyncing] = useState(false);
+  const [syncNotice, setSyncNotice] = useState<string | null>(null);
   const [isBulkUpdateModalOpen, setIsBulkUpdateModalOpen] = useState(false);
   const [bulkUpdateMarketplaces, setBulkUpdateMarketplaces] = useState<MarketplaceKey[]>(MARKETPLACES);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -357,9 +361,10 @@ export const ProductList: React.FC = () => {
         params: {
           search: searchQuery || undefined,
           page: currentPage,
-          limit: 20,
+          limit: CATALOG_PAGE_SIZE,
           stockFilter: stockFilter !== 'all' ? stockFilter : undefined,
           sortBy: stockSort !== 'none' ? `stock_${stockSort}` : undefined,
+          category: categoryFilter !== 'all' ? categoryFilter : undefined,
         },
       });
 
@@ -369,7 +374,7 @@ export const ProductList: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [currentPage, searchQuery, stockFilter, stockSort]);
+  }, [categoryFilter, currentPage, searchQuery, stockFilter, stockSort]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -381,13 +386,14 @@ export const ProductList: React.FC = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, stockFilter, stockSort]);
+  }, [categoryFilter, searchQuery, stockFilter, stockSort]);
 
   const syncMarketplaceStatus = async () => {
     if (catalog.items.length === 0) return;
     setIsSyncing(true);
+    setSyncNotice(null);
     try {
-      const skus = catalog.items.map((item) => item.sku);
+      const skus = catalog.items.slice(0, MARKETPLACE_STATUS_SYNC_LIMIT).map((item) => item.sku);
       const { data } = await axiosInstance.post<Record<string, Record<string, { exists: boolean; externalId: string | null }>>>('/marketplace-sync/status', { skus });
 
       setCatalog((prev) => ({
@@ -406,10 +412,31 @@ export const ProductList: React.FC = () => {
           }),
         })),
       }));
+      setSyncNotice(`Sincronización ligera completada para ${skus.length} SKU(s).`);
     } catch (error) {
       console.error('Error syncing marketplace status:', error);
+      setSyncNotice('No se pudo completar la sincronización ligera de marketplaces.');
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const syncFalabellaCatalogStatus = async () => {
+    setIsFalabellaCatalogSyncing(true);
+    setSyncNotice(null);
+    try {
+      const { data } = await axiosInstance.post<{
+        found: number;
+        updated: number;
+      }>('/marketplace-sync/falabella/catalog-status', undefined, { timeout: 180000 });
+      setSyncNotice(`Falabella sincronizado: ${data.found} productos encontrados, ${data.updated} registros actualizados.`);
+      await loadCatalog();
+    } catch (error: unknown) {
+      const responseMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      const errorMessage = error instanceof Error ? error.message : null;
+      setSyncNotice(responseMessage || errorMessage || 'No se pudo sincronizar el catálogo Falabella');
+    } finally {
+      setIsFalabellaCatalogSyncing(false);
     }
   };
 
@@ -724,6 +751,9 @@ export const ProductList: React.FC = () => {
 
   const totalPages = Math.max(1, Math.ceil(catalog.total / catalog.limit || 1));
   const productsWithImage = catalog.items.filter((product) => product.hasImage).length;
+  const categoryOptions = Array.from(
+    new Set(catalog.items.map((product) => product.category).filter((category): category is string => Boolean(category))),
+  ).sort((a, b) => a.localeCompare(b));
 
   // Estado global del producto: publicado (al menos 1 marketplace), con error, no publicado
   const getProductGlobalStatus = (product: CatalogProduct): 'published' | 'error' | 'unpublished' => {
@@ -857,22 +887,6 @@ export const ProductList: React.FC = () => {
         );
       },
     })),
-    {
-      key: 'actions',
-      header: 'Acciones',
-      align: 'center' as const,
-      render: (product: CatalogProduct) => (
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={() => void loadProductDetail(product.sku)}
-          className="gap-1.5"
-        >
-          <Eye className="w-4 h-4" />
-          Gestionar
-        </Button>
-      ),
-    },
   ];
 
   return (
@@ -989,6 +1003,19 @@ export const ProductList: React.FC = () => {
         </div>
         <div className="h-5 w-px bg-gray-200" />
         <select
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          className="rounded-full border border-gray-200 bg-white px-4 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-300"
+        >
+          <option value="all">Todas las categorías</option>
+          {categoryFilter !== 'all' && !categoryOptions.includes(categoryFilter) && (
+            <option value={categoryFilter}>{categoryFilter}</option>
+          )}
+          {categoryOptions.map((category) => (
+            <option key={category} value={category}>{category}</option>
+          ))}
+        </select>
+        <select
           value={marketplaceFilter}
           onChange={(e) => setMarketplaceFilter(e.target.value)}
           className="rounded-full border border-gray-200 bg-white px-4 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-300"
@@ -1007,7 +1034,21 @@ export const ProductList: React.FC = () => {
           <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
           {isSyncing ? 'Sincronizando...' : 'Sincronizar marketplaces'}
         </button>
+        <button
+          type="button"
+          onClick={() => void syncFalabellaCatalogStatus()}
+          disabled={isFalabellaCatalogSyncing || isLoading}
+          className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed transition"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${isFalabellaCatalogSyncing ? 'animate-spin' : ''}`} />
+          {isFalabellaCatalogSyncing ? 'Sincronizando Falabella...' : 'Sincronizar catálogo Falabella'}
+        </button>
       </div>
+      {syncNotice && (
+        <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700">
+          {syncNotice}
+        </div>
+      )}
 
       <Card className="overflow-hidden">
         {loadError ? (
