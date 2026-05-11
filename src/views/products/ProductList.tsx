@@ -388,7 +388,7 @@ export const ProductList: React.FC = () => {
     setIsSyncing(true);
     try {
       const skus = catalog.items.map((item) => item.sku);
-      const { data } = await axiosInstance.post<Record<string, Record<string, { exists: boolean; externalId: string | null }>>>('/catalog/products/sync-status', { skus });
+      const { data } = await axiosInstance.post<Record<string, Record<string, { exists: boolean; externalId: string | null }>>>('/marketplace-sync/status', { skus });
 
       setCatalog((prev) => ({
         ...prev,
