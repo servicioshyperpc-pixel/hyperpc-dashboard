@@ -14,6 +14,7 @@ export interface TableProps<T = any> {
   className?: string;
   headerClassName?: string;
   rowClassName?: string;
+  onRowClick?: (item: T) => void;
   emptyMessage?: string;
 }
 
@@ -23,6 +24,7 @@ export function Table<T extends Record<string, any>>({
   className = '',
   headerClassName = '',
   rowClassName = '',
+  onRowClick,
   emptyMessage = 'No hay datos disponibles',
 }: TableProps<T>) {
   const alignClasses = {
@@ -64,7 +66,11 @@ export function Table<T extends Record<string, any>>({
             </tr>
           ) : (
             data.map((item, index) => (
-              <tr key={index} className={`hover:bg-gray-50 ${rowClassName}`}>
+              <tr
+                key={index}
+                onClick={onRowClick ? () => onRowClick(item) : undefined}
+                className={`hover:bg-gray-50 ${onRowClick ? 'cursor-pointer' : ''} ${rowClassName}`}
+              >
                 {columns.map((column) => (
                   <td
                     key={column.key}

@@ -65,6 +65,10 @@ interface CatalogResponse {
 
 interface ProductDetailResponse extends CatalogProduct {
   attributes?: ProductAttribute[];
+  odooDetails?: {
+    product?: Record<string, any> | null;
+    template?: Record<string, any> | null;
+  };
   marketplaceDetails: Record<
     MarketplaceKey,
     {
@@ -195,6 +199,61 @@ const formatCurrency = (amount: number) =>
   }).format(amount || 0);
 
 const priceWithIva = (price: number) => Math.round((price || 0) * IVA_RATE);
+
+const ODOO_FIELD_LABELS: Record<string, string> = {
+  id: 'ID',
+  display_name: 'Nombre completo',
+  name: 'Nombre',
+  default_code: 'SKU',
+  barcode: 'Código de barras',
+  active: 'Activo',
+  sale_ok: 'Puede venderse',
+  purchase_ok: 'Puede comprarse',
+  detailed_type: 'Tipo detallado',
+  type: 'Tipo',
+  tracking: 'Trazabilidad',
+  qty_available: 'Stock físico',
+  free_qty: 'Stock disponible',
+  virtual_available: 'Stock pronosticado',
+  incoming_qty: 'Entrante',
+  outgoing_qty: 'Saliente',
+  lst_price: 'Precio venta',
+  list_price: 'Precio lista',
+  standard_price: 'Costo',
+  categ_id: 'Categoría',
+  product_tmpl_id: 'Plantilla',
+  uom_id: 'Unidad de medida',
+  uom_po_id: 'Unidad de compra',
+  weight: 'Peso',
+  volume: 'Volumen',
+  description: 'Descripción interna',
+  description_sale: 'Descripción venta',
+  description_purchase: 'Descripción compra',
+  create_date: 'Creado en Odoo',
+  write_date: 'Actualizado en Odoo',
+};
+
+const formatOdooValue = (value: any): string => {
+  if (value === null || value === undefined || value === false || value === '') return 'Sin dato';
+  if (value === true) return 'Sí';
+  if (Array.isArray(value)) return value.filter((item) => item !== false && item !== null && item !== undefined).join(' · ') || 'Sin dato';
+  if (typeof value === 'object') return JSON.stringify(value, null, 2);
+  return String(value);
+};
+
+const renderOdooField = (source: Record<string, any>, field: string) => {
+  const value = source[field];
+  const isLongText = typeof value === 'string' && value.length > 120;
+
+  return (
+    <div key={field} className={`rounded-xl border border-gray-200 bg-white p-3 ${isLongText ? 'sm:col-span-2' : ''}`}>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-400">{ODOO_FIELD_LABELS[field] || field}</p>
+      <p className={`mt-1 text-sm text-gray-800 ${isLongText ? 'whitespace-pre-wrap leading-6' : 'break-words'}`}>
+        {formatOdooValue(value)}
+      </p>
+    </div>
+  );
+};
 
 const parseLinesToAttributes = (value: string) =>
   value
@@ -779,6 +838,7 @@ export const ProductList: React.FC = () => {
         <input
           type="checkbox"
           checked={catalog.items.length > 0 && catalog.items.every((item) => selectedSkus.includes(item.sku))}
+          onClick={(event) => event.stopPropagation()}
           onChange={toggleAllVisible}
           aria-label="Seleccionar visibles"
           className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-500"
@@ -790,6 +850,7 @@ export const ProductList: React.FC = () => {
         <input
           type="checkbox"
           checked={selectedSkus.includes(product.sku)}
+          onClick={(event) => event.stopPropagation()}
           onChange={() => toggleSkuSelection(product.sku)}
           aria-label={`Seleccionar ${product.sku}`}
           className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-500"
@@ -823,7 +884,7 @@ export const ProductList: React.FC = () => {
       header: 'SKU',
       render: (product: CatalogProduct) => (
         <div>
-          <p className="font-mono text-sm font-semibold text-gray-900">{product.sku}</p>
+          <p className="font-mono text-sm font-semibold text-gray-900 underline-offset-2 group-hover:underline">{product.sku}</p>
           <p className="text-xs text-gray-500">ID Odoo {product.id}</p>
         </div>
       ),
@@ -833,7 +894,7 @@ export const ProductList: React.FC = () => {
       header: 'Catálogo Odoo',
       render: (product: CatalogProduct) => (
         <div className="min-w-[260px] max-w-[340px]">
-          <p className="font-medium text-gray-900 truncate">{product.name}</p>
+          <p className="font-medium text-gray-900 truncate underline-offset-2 group-hover:underline">{product.name}</p>
           <p className="text-xs text-gray-500 truncate">{product.category || 'Sin categoría'}</p>
         </div>
       ),
@@ -1057,7 +1118,14 @@ export const ProductList: React.FC = () => {
           <div className="py-12 text-center text-sm text-gray-500">Cargando catálogo de Odoo...</div>
         ) : (
           <>
-            <Table columns={columns} data={filteredItems} emptyMessage="No hay productos para este filtro" className="pb-3 overflow-x-scroll" />
+            <Table
+              columns={columns}
+              data={filteredItems}
+              emptyMessage="No hay productos para este filtro"
+              className="pb-3 overflow-x-scroll"
+              rowClassName="group"
+              onRowClick={(product) => void loadProductDetail(product.sku)}
+            />
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 sm:px-6 py-4 border-t border-gray-200">
               <p className="text-sm text-gray-600">
                 Mostrando {(catalog.page - 1) * catalog.limit + 1} a {Math.min(catalog.page * catalog.limit, catalog.total)} de {catalog.total} productos
@@ -1494,8 +1562,8 @@ export const ProductList: React.FC = () => {
             <div className="flex-1 overflow-y-auto p-4 space-y-5 sm:p-6">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.18em] text-gray-500">Publicación</p>
-                  <h2 className="text-lg font-semibold text-gray-950">Gestión por marketplace</h2>
+                  <p className="text-xs uppercase tracking-[0.18em] text-gray-500">Odoo</p>
+                  <h2 className="text-lg font-semibold text-gray-950">Detalle del producto</h2>
                 </div>
                 <button
                   onClick={() => setSelectedProduct(null)}
@@ -1531,6 +1599,74 @@ export const ProductList: React.FC = () => {
                       </div>
                     </div>
                   </div>
+
+                  {selectedProduct.odooDetails?.product && (
+                    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.18em] text-gray-500">Campos de Odoo</p>
+                          <p className="text-sm text-gray-600">Información directa de la variante del producto.</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        {[
+                          'display_name',
+                          'default_code',
+                          'barcode',
+                          'categ_id',
+                          'active',
+                          'sale_ok',
+                          'purchase_ok',
+                          'detailed_type',
+                          'type',
+                          'tracking',
+                          'qty_available',
+                          'free_qty',
+                          'virtual_available',
+                          'incoming_qty',
+                          'outgoing_qty',
+                          'lst_price',
+                          'standard_price',
+                          'uom_id',
+                          'uom_po_id',
+                          'weight',
+                          'volume',
+                          'description_sale',
+                          'description',
+                          'description_purchase',
+                          'create_date',
+                          'write_date',
+                        ]
+                          .filter((field) => Object.prototype.hasOwnProperty.call(selectedProduct.odooDetails?.product || {}, field))
+                          .map((field) => renderOdooField(selectedProduct.odooDetails!.product!, field))}
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedProduct.odooDetails?.template && (
+                    <div className="rounded-2xl border border-gray-200 bg-white p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-gray-500 mb-3">Plantilla Odoo</p>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        {[
+                          'display_name',
+                          'default_code',
+                          'barcode',
+                          'categ_id',
+                          'list_price',
+                          'standard_price',
+                          'uom_id',
+                          'uom_po_id',
+                          'weight',
+                          'volume',
+                          'description_sale',
+                          'description',
+                          'description_purchase',
+                        ]
+                          .filter((field) => Object.prototype.hasOwnProperty.call(selectedProduct.odooDetails?.template || {}, field))
+                          .map((field) => renderOdooField(selectedProduct.odooDetails!.template!, field))}
+                      </div>
+                    </div>
+                  )}
 
                   {selectedProduct.attributes && selectedProduct.attributes.length > 0 && (
                     <div className="rounded-2xl border border-gray-200 bg-white p-4">
