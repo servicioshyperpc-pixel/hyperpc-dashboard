@@ -366,6 +366,7 @@ export const ProductList: React.FC = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<ProductDetailResponse | null>(null);
   const [selectedMarketplace, setSelectedMarketplace] = useState<MarketplaceKey>('falabella');
+  const [isDetailPanelOpen, setIsDetailPanelOpen] = useState(false);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -563,12 +564,13 @@ export const ProductList: React.FC = () => {
   }, []);
 
   const loadProductDetail = useCallback(async (sku: string, preferredMarketplace?: MarketplaceKey) => {
+    setIsDetailPanelOpen(true);
     setIsDetailLoading(true);
     setDetailError(null);
     setDetailNotice(null);
 
     try {
-      const { data } = await axiosInstance.get<ProductDetailResponse>(`/catalog/products/${sku}`);
+      const { data } = await axiosInstance.get<ProductDetailResponse>(`/catalog/products/${sku}`, { timeout: 30000 });
       const marketplace = preferredMarketplace || selectedMarketplace;
       setSelectedProduct(data);
       setSelectedMarketplace(marketplace);
@@ -1555,9 +1557,15 @@ export const ProductList: React.FC = () => {
         </>
       )}
 
-      {(selectedProduct || isDetailLoading) && (
+      {(isDetailPanelOpen || selectedProduct || isDetailLoading) && (
         <>
-          <div className="fixed inset-0 z-40 bg-black/35" onClick={() => setSelectedProduct(null)} />
+          <div
+            className="fixed inset-0 z-40 bg-black/35"
+            onClick={() => {
+              setIsDetailPanelOpen(false);
+              setSelectedProduct(null);
+            }}
+          />
           <aside className="fixed right-0 top-0 z-50 h-screen w-full overflow-y-auto border-l border-black/10 bg-white shadow-2xl sm:max-w-xl">
             <div className="flex-1 overflow-y-auto p-4 space-y-5 sm:p-6">
               <div className="flex items-start justify-between gap-3">
@@ -1566,7 +1574,10 @@ export const ProductList: React.FC = () => {
                   <h2 className="text-lg font-semibold text-gray-950">Detalle del producto</h2>
                 </div>
                 <button
-                  onClick={() => setSelectedProduct(null)}
+                  onClick={() => {
+                    setIsDetailPanelOpen(false);
+                    setSelectedProduct(null);
+                  }}
                   className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
                 >
                   <X className="w-4 h-4" />
@@ -1574,6 +1585,12 @@ export const ProductList: React.FC = () => {
               </div>
 
               {isDetailLoading && <div className="py-12 text-center text-sm text-gray-500">Cargando detalle del producto...</div>}
+
+              {detailError && !isDetailLoading && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {detailError}
+                </div>
+              )}
 
               {selectedProduct && !isDetailLoading && (
                 <>
