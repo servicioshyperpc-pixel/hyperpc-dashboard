@@ -127,6 +127,7 @@ interface BulkPublishResponse {
 
 type BulkImportMarketplaceKey = 'falabella' | 'ripley' | 'paris' | 'walmart' | 'meli';
 type BulkImportStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
+type BulkUpdateField = 'stock' | 'price' | 'title' | 'description' | 'images';
 
 interface BulkImportMarketplaceProgress {
   status: BulkImportStatus;
@@ -181,6 +182,22 @@ const BULK_IMPORT_STATUS_LABELS: Record<BulkImportStatus, string> = {
   completed: 'Completado',
   failed: 'Falló',
   skipped: 'Omitido',
+};
+
+const BULK_UPDATE_FIELD_LABELS: Record<BulkUpdateField, string> = {
+  stock: 'Stock',
+  price: 'Precio',
+  title: 'Titulo',
+  description: 'Descripcion',
+  images: 'Imagenes',
+};
+
+const BULK_UPDATE_FIELDS_BY_MARKETPLACE: Record<MarketplaceKey, BulkUpdateField[]> = {
+  falabella: ['stock', 'price', 'title', 'description', 'images'],
+  mercadolibre: ['stock', 'price', 'images'],
+  ripley: ['stock', 'price', 'title', 'description', 'images'],
+  paris: ['stock', 'price', 'title', 'images'],
+  walmart: ['stock', 'price', 'title', 'description'],
 };
 
 const bulkImportStatusClass = (status: BulkImportStatus) => {
@@ -458,6 +475,12 @@ export const ProductList: React.FC = () => {
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
   const [isBulkUpdateModalOpen, setIsBulkUpdateModalOpen] = useState(false);
   const [bulkUpdateMarketplaces, setBulkUpdateMarketplaces] = useState<MarketplaceKey[]>(MARKETPLACES);
+  const [expandedBulkUpdateMarketplaces, setExpandedBulkUpdateMarketplaces] = useState<MarketplaceKey[]>(['falabella']);
+  const [bulkUpdateFieldsByMarketplace, setBulkUpdateFieldsByMarketplace] = useState<Record<MarketplaceKey, BulkUpdateField[]>>(
+    () => Object.fromEntries(
+      MARKETPLACES.map((marketplace) => [marketplace, BULK_UPDATE_FIELDS_BY_MARKETPLACE[marketplace]]),
+    ) as Record<MarketplaceKey, BulkUpdateField[]>,
+  );
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -867,6 +890,42 @@ export const ProductList: React.FC = () => {
     }
   };
 
+  const toggleBulkUpdateMarketplace = (marketplace: MarketplaceKey) => {
+    const isSelected = bulkUpdateMarketplaces.includes(marketplace);
+    setBulkUpdateMarketplaces((current) =>
+      isSelected ? current.filter((item) => item !== marketplace) : [...current, marketplace],
+    );
+    if (!isSelected) {
+      setExpandedBulkUpdateMarketplaces((current) =>
+        current.includes(marketplace) ? current : [...current, marketplace],
+      );
+      setBulkUpdateFieldsByMarketplace((current) => ({
+        ...current,
+        [marketplace]: current[marketplace]?.length
+          ? current[marketplace]
+          : BULK_UPDATE_FIELDS_BY_MARKETPLACE[marketplace],
+      }));
+    }
+  };
+
+  const toggleBulkUpdateMarketplaceExpanded = (marketplace: MarketplaceKey) => {
+    setExpandedBulkUpdateMarketplaces((current) =>
+      current.includes(marketplace)
+        ? current.filter((item) => item !== marketplace)
+        : [...current, marketplace],
+    );
+  };
+
+  const toggleBulkUpdateField = (marketplace: MarketplaceKey, field: BulkUpdateField) => {
+    setBulkUpdateFieldsByMarketplace((current) => {
+      const currentFields = current[marketplace] || [];
+      const nextFields = currentFields.includes(field)
+        ? currentFields.filter((item) => item !== field)
+        : [...currentFields, field];
+      return { ...current, [marketplace]: nextFields };
+    });
+  };
+
   const runBulkAction = async (dryRun: boolean, options?: { skus?: string[]; marketplaces?: MarketplaceKey[]; forceUpdate?: boolean }) => {
     const targetSkus = options?.skus?.length ? options.skus : selectedSkus;
     const targetMarketplaces = options?.marketplaces?.length ? options.marketplaces : bulkMarketplaces;
@@ -932,6 +991,9 @@ export const ProductList: React.FC = () => {
     unpublished: catalog.items.filter((p) => getProductGlobalStatus(p) === 'unpublished').length,
     error: catalog.items.filter((p) => getProductGlobalStatus(p) === 'error').length,
   };
+  const hasBulkUpdateFieldsSelected = bulkUpdateMarketplaces.some(
+    (marketplace) => (bulkUpdateFieldsByMarketplace[marketplace] || []).length > 0,
+  );
 
   const columns = [
     {
@@ -1450,26 +1512,69 @@ export const ProductList: React.FC = () => {
                 <div className="space-y-5">
                   <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700 space-y-2">
                     <p><span className="font-semibold text-gray-950">SKU seleccionados:</span> {selectedSkus.length}</p>
-                    <p><span className="font-semibold text-gray-950">Modo:</span> actualiza título, precio, stock e imagen en los marketplaces donde ya estén publicados.</p>
+                    <p><span className="font-semibold text-gray-950">Modo:</span> elige por marketplace qué datos quieres actualizar desde Odoo.</p>
                   </div>
 
                   <div>
                     <p className="text-sm font-semibold text-gray-950 mb-3">Canales a actualizar</p>
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       {MARKETPLACES.map((marketplace) => {
                         const checked = bulkUpdateMarketplaces.includes(marketplace);
+                        const expanded = expandedBulkUpdateMarketplaces.includes(marketplace);
+                        const selectedFields = bulkUpdateFieldsByMarketplace[marketplace] || [];
+                        const availableFields = BULK_UPDATE_FIELDS_BY_MARKETPLACE[marketplace];
                         return (
-                          <label key={marketplace} className="flex items-center justify-between rounded-xl border border-gray-200 px-3 py-2.5 cursor-pointer hover:border-gray-300">
-                            <div>
-                              <p className="text-sm font-medium text-gray-900">{MARKETPLACE_LABELS[marketplace]}</p>
+                          <div key={marketplace} className="rounded-xl border border-gray-200 bg-white">
+                            <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+                              <button
+                                type="button"
+                                onClick={() => toggleBulkUpdateMarketplaceExpanded(marketplace)}
+                                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                              >
+                                <ChevronDown className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                                <span className="min-w-0">
+                                  <span className="block text-sm font-medium text-gray-900">{MARKETPLACE_LABELS[marketplace]}</span>
+                                  <span className="block truncate text-xs text-gray-500">
+                                    {checked && selectedFields.length
+                                      ? selectedFields.map((field) => BULK_UPDATE_FIELD_LABELS[field]).join(', ')
+                                      : checked
+                                        ? 'Selecciona al menos un dato'
+                                        : 'No seleccionado'}
+                                  </span>
+                                </span>
+                              </button>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleBulkUpdateMarketplace(marketplace)}
+                                className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-500"
+                              />
                             </div>
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => setBulkUpdateMarketplaces((current) => checked ? current.filter((item) => item !== marketplace) : [...current, marketplace])}
-                              className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-500"
-                            />
-                          </label>
+                            {expanded && (
+                              <div className="border-t border-gray-100 px-3 py-3">
+                                <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-gray-500">Datos a actualizar</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {availableFields.map((field) => (
+                                    <label
+                                      key={`${marketplace}-${field}`}
+                                      className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 text-sm ${
+                                        checked ? 'cursor-pointer border-gray-200 hover:border-gray-300' : 'cursor-not-allowed border-gray-100 bg-gray-50 text-gray-400'
+                                      }`}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedFields.includes(field)}
+                                        disabled={!checked}
+                                        onChange={() => toggleBulkUpdateField(marketplace, field)}
+                                        className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-500 disabled:opacity-50"
+                                      />
+                                      <span>{BULK_UPDATE_FIELD_LABELS[field]}</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         );
                       })}
                     </div>
@@ -1479,16 +1584,16 @@ export const ProductList: React.FC = () => {
                     <Button
                       variant="secondary"
                       className="gap-2"
-                      onClick={() => void runBulkAction(true, { marketplaces: bulkUpdateMarketplaces })}
-                      disabled={isBulkSubmitting || selectedSkus.length === 0 || bulkUpdateMarketplaces.length === 0}
+                      onClick={() => void runBulkAction(true, { marketplaces: bulkUpdateMarketplaces, forceUpdate: true })}
+                      disabled={isBulkSubmitting || selectedSkus.length === 0 || bulkUpdateMarketplaces.length === 0 || !hasBulkUpdateFieldsSelected}
                     >
                       <Search className="w-4 h-4" />
                       Verificar
                     </Button>
                     <Button
                       className="gap-2"
-                      onClick={() => void runBulkAction(false, { marketplaces: bulkUpdateMarketplaces })}
-                      disabled={isBulkSubmitting || selectedSkus.length === 0 || bulkUpdateMarketplaces.length === 0}
+                      onClick={() => void runBulkAction(false, { marketplaces: bulkUpdateMarketplaces, forceUpdate: true })}
+                      disabled={isBulkSubmitting || selectedSkus.length === 0 || bulkUpdateMarketplaces.length === 0 || !hasBulkUpdateFieldsSelected}
                       isLoading={isBulkSubmitting}
                     >
                       <Upload className="w-4 h-4" />
@@ -1500,7 +1605,7 @@ export const ProductList: React.FC = () => {
                 <div className="min-h-[320px] space-y-4">
                   <div className="rounded-2xl border border-gray-200 bg-white p-4">
                     <p className="text-sm font-semibold text-gray-950">Resultado</p>
-                    <p className="mt-1 text-xs text-gray-500">Solo actualiza productos que ya existan en el marketplace seleccionado.</p>
+                    <p className="mt-1 text-xs text-gray-500">Verifica y actualiza los productos seleccionados en los canales marcados.</p>
                   </div>
 
                   {bulkNotice && <div className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">{bulkNotice}</div>}
