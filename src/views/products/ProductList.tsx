@@ -125,6 +125,38 @@ interface BulkPublishResponse {
   results: BulkPublishSkuResult[];
 }
 
+type BulkImportMarketplaceKey = 'falabella' | 'ripley' | 'paris' | 'walmart' | 'meli';
+type BulkImportStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
+
+interface BulkImportMarketplaceProgress {
+  status: BulkImportStatus;
+  total: number;
+  processed: number;
+  success: number;
+  failed: number;
+  errors?: Array<{ sku: string; reason: string }>;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+interface BulkImportUploadResponse {
+  ok: boolean;
+  jobId: string;
+  message: string;
+  products: Record<BulkImportMarketplaceKey, number>;
+  order: BulkImportMarketplaceKey[];
+}
+
+interface BulkImportStatusResponse {
+  ok: boolean;
+  jobId: string;
+  filename: string;
+  status: BulkImportStatus;
+  marketplaces: Record<BulkImportMarketplaceKey, BulkImportMarketplaceProgress>;
+  startedAt?: string;
+  completedAt?: string;
+}
+
 const MARKETPLACES: MarketplaceKey[] = ['falabella', 'mercadolibre', 'ripley', 'paris', 'walmart'];
 
 const MARKETPLACE_LABELS: Record<MarketplaceKey, string> = {
@@ -133,6 +165,37 @@ const MARKETPLACE_LABELS: Record<MarketplaceKey, string> = {
   ripley: 'Ripley',
   paris: 'Paris',
   walmart: 'Walmart',
+};
+
+const BULK_IMPORT_LABELS: Record<BulkImportMarketplaceKey, string> = {
+  falabella: 'Falabella',
+  ripley: 'Ripley',
+  paris: 'Paris',
+  walmart: 'Walmart',
+  meli: 'MercadoLibre',
+};
+
+const BULK_IMPORT_STATUS_LABELS: Record<BulkImportStatus, string> = {
+  pending: 'Pendiente',
+  processing: 'Procesando',
+  completed: 'Completado',
+  failed: 'Falló',
+  skipped: 'Omitido',
+};
+
+const bulkImportStatusClass = (status: BulkImportStatus) => {
+  switch (status) {
+    case 'completed':
+      return 'bg-green-100 text-green-800';
+    case 'failed':
+      return 'bg-red-100 text-red-800';
+    case 'processing':
+      return 'bg-blue-100 text-blue-800';
+    case 'skipped':
+      return 'bg-gray-100 text-gray-700';
+    default:
+      return 'bg-amber-100 text-amber-800';
+  }
 };
 
 const STATUS_META: Record<PublicationStatus, { label: string; variant: 'success' | 'error' | 'warning' | 'info' | 'default'; helper: string }> = {
@@ -397,19 +460,9 @@ export const ProductList: React.FC = () => {
   const [bulkUpdateMarketplaces, setBulkUpdateMarketplaces] = useState<MarketplaceKey[]>(MARKETPLACES);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
-  const [importSkus, setImportSkus] = useState('');
-  const [importDryRun, setImportDryRun] = useState(true);
-  const [importMarketplace, setImportMarketplace] = useState<'paris' | 'mercadolibre' | 'ripley' | 'falabella'>('paris');
-  const [importValidate, setImportValidate] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  const [importResult, setImportResult] = useState<{
-    total: number;
-    imported: number;
-    skipped: number;
-    errors: Array<{ sku: string; reason: string }>;
-    warnings: Array<{ sku: string; messages: string[] }>;
-    samples: string[];
-  } | null>(null);
+  const [importResult, setImportResult] = useState<BulkImportUploadResponse | null>(null);
+  const [importJobStatus, setImportJobStatus] = useState<BulkImportStatusResponse | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
 
   const loadCatalog = useCallback(async () => {
@@ -590,28 +643,36 @@ export const ProductList: React.FC = () => {
     setIsImporting(true);
     setImportError(null);
     setImportResult(null);
+    setImportJobStatus(null);
     try {
       const form = new FormData();
       form.append('file', importFile);
-      const params = new URLSearchParams({ marketplace: importMarketplace });
-      if (importDryRun) params.set('dryRun', 'true');
-      if (importMarketplace === 'mercadolibre' && importValidate) {
-        params.set('validate', 'true');
-      }
-      const skusClean = importSkus.trim();
-      if (skusClean) params.set('skus', skusClean);
-      const { data } = await axiosInstance.post(
-        `/catalog/import-excel?${params.toString()}`,
+      const { data } = await axiosInstance.post<BulkImportUploadResponse>(
+        '/bulk-import/upload',
         form,
         { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 300000 },
       );
       setImportResult(data);
-      if (!importDryRun && data.imported > 0) {
-        await loadCatalog();
-        if (selectedProduct) {
-          await loadProductDetail(selectedProduct.sku, selectedMarketplace);
-        }
-      }
+      const marketplaces = Object.fromEntries(
+        data.order.map((marketplace) => [
+          marketplace,
+          {
+            status: data.products[marketplace] > 0 ? 'pending' : 'skipped',
+            total: data.products[marketplace] || 0,
+            processed: 0,
+            success: 0,
+            failed: 0,
+            errors: [],
+          },
+        ]),
+      ) as unknown as Record<BulkImportMarketplaceKey, BulkImportMarketplaceProgress>;
+      setImportJobStatus({
+        ok: true,
+        jobId: data.jobId,
+        filename: importFile.name,
+        status: 'pending',
+        marketplaces,
+      });
     } catch (err: any) {
       setImportError(err?.response?.data?.message || err?.message || 'Error al importar');
     } finally {
@@ -619,10 +680,49 @@ export const ProductList: React.FC = () => {
     }
   }, [
     importFile,
-    importSkus,
-    importDryRun,
-    importMarketplace,
-    importValidate,
+  ]);
+
+  useEffect(() => {
+    if (!importResult?.jobId || importJobStatus?.status === 'completed' || importJobStatus?.status === 'failed') {
+      return;
+    }
+
+    let cancelled = false;
+    let catalogRefreshed = false;
+
+    const pollStatus = async () => {
+      try {
+        const { data } = await axiosInstance.get<BulkImportStatusResponse>(
+          `/bulk-import/${importResult.jobId}/status`,
+          { timeout: 30000 },
+        );
+        if (cancelled) return;
+        setImportJobStatus(data);
+
+        if (data.status === 'completed' && !catalogRefreshed) {
+          catalogRefreshed = true;
+          await loadCatalog();
+          if (selectedProduct) {
+            await loadProductDetail(selectedProduct.sku, selectedMarketplace);
+          }
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setImportError(err?.response?.data?.message || err?.message || 'No se pudo consultar el estado de la importación');
+        }
+      }
+    };
+
+    void pollStatus();
+    const interval = window.setInterval(() => void pollStatus(), 4000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [
+    importResult?.jobId,
+    importJobStatus?.status,
     loadCatalog,
     loadProductDetail,
     selectedMarketplace,
@@ -1007,9 +1107,8 @@ export const ProductList: React.FC = () => {
             className="gap-2"
             onClick={() => {
               setImportFile(null);
-              setImportSkus('');
-              setImportDryRun(true);
               setImportResult(null);
+              setImportJobStatus(null);
               setImportError(null);
               setIsImportModalOpen(true);
             }}
@@ -2173,26 +2272,8 @@ export const ProductList: React.FC = () => {
 
             <div className="flex-1 overflow-y-auto space-y-4 px-5 py-4">
               <p className="text-sm text-gray-600">
-                Sube el Excel maestro <strong>Lista de precios HyperPC.xlsx</strong>. Cada marketplace lee su propia hoja:
-                Paris → <strong>"Paris editar"</strong>, MercadoLibre → <strong>"Computadores"</strong>, Ripley → <strong>"Ripley"</strong>, Falabella → <strong>"Falabella"</strong>.
+                Carga el Excel maestro. El backend detecta las hojas disponibles y procesa cada marketplace automáticamente, en orden y sin selección manual.
               </p>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Marketplace
-                </label>
-                <select
-                  value={importMarketplace}
-                  onChange={(e) => setImportMarketplace(e.target.value as 'paris' | 'mercadolibre' | 'ripley' | 'falabella')}
-                  disabled={isImporting}
-                  className="block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-gray-900 focus:outline-none disabled:opacity-50"
-                >
-                  <option value="paris">Paris</option>
-                  <option value="mercadolibre">MercadoLibre</option>
-                  <option value="ripley">Ripley</option>
-                  <option value="falabella">Falabella</option>
-                </select>
-              </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -2207,43 +2288,6 @@ export const ProductList: React.FC = () => {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  SKUs a importar (opcional, separados por coma)
-                </label>
-                <Input
-                  placeholder="CON003F,CON004F"
-                  value={importSkus}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setImportSkus(e.target.value)}
-                  disabled={isImporting}
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Vacío = importa todas las filas del Excel.
-                </p>
-              </div>
-
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={importDryRun}
-                  onChange={(e) => setImportDryRun(e.target.checked)}
-                  disabled={isImporting}
-                />
-                Dry run (prellena la ficha local sin publicar en el marketplace)
-              </label>
-
-              {importMarketplace === 'mercadolibre' && (
-                <label className="flex items-center gap-2 text-sm text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={importValidate}
-                    onChange={(e) => setImportValidate(e.target.checked)}
-                    disabled={isImporting}
-                  />
-                  Validar contra MercadoLibre (<code>/items/validate</code>, más lento)
-                </label>
-              )}
-
               {importError && (
                 <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
                   {importError}
@@ -2252,59 +2296,53 @@ export const ProductList: React.FC = () => {
 
               {importResult && (
                 <div className="rounded-md bg-gray-50 border border-gray-200 px-3 py-3 text-sm space-y-2">
-                  {importResult.errors.length === 0 && importResult.imported > 0 && (
-                    <div className="rounded-md bg-green-50 border border-green-300 px-3 py-2 text-green-800 font-medium">
-                      {importDryRun
-                        ? `✓ Validación exitosa: ${importResult.imported} productos listos para importar`
-                        : `✓ Importación exitosa: ${importResult.imported} productos guardados en la base de datos`}
-                    </div>
-                  )}
-                  <div className="flex gap-4 flex-wrap">
-                    <span className="rounded-full bg-gray-200 px-2 py-0.5">Total: {importResult.total}</span>
-                    <span className="rounded-full bg-green-100 text-green-800 px-2 py-0.5">
-                      Importados: {importResult.imported}
-                    </span>
-                    <span className="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5">
-                      Omitidos: {importResult.skipped}
-                    </span>
+                  <div className="rounded-md bg-green-50 border border-green-300 px-3 py-2 text-green-800 font-medium">
+                    Excel recibido. Job: <span className="font-mono">{importResult.jobId}</span>
                   </div>
-                  {importResult.samples?.length > 0 && (
-                    <details className="rounded-md border border-gray-200 bg-white">
-                      <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50">
-                        Muestras ({importResult.samples.length})
-                      </summary>
-                      <div className="max-h-48 overflow-auto border-t border-gray-200 px-3 py-2 text-xs text-gray-600">
-                        {importResult.samples.join(', ')}
-                      </div>
-                    </details>
-                  )}
-                  {importResult.errors?.length > 0 && (
-                    <details className="rounded-md border border-red-200 bg-red-50" open>
-                      <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100">
-                        Errores ({importResult.errors.length})
-                      </summary>
-                      <ul className="max-h-48 overflow-auto border-t border-red-200 space-y-1 px-3 py-2 text-xs text-red-700">
-                        {importResult.errors.map((e, i) => (
-                          <li key={i}>
-                            <strong>{e.sku}:</strong> {e.reason}
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  )}
-                  {importResult.warnings?.length > 0 && (
-                    <details className="rounded-md border border-amber-200 bg-amber-50">
-                      <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-100">
-                        Advertencias ({importResult.warnings.length})
-                      </summary>
-                      <ul className="max-h-48 overflow-auto border-t border-amber-200 space-y-1 px-3 py-2 text-xs text-amber-700">
-                        {importResult.warnings.map((w, i) => (
-                          <li key={i}>
-                            <strong>{w.sku}:</strong> {w.messages.join('; ')}
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
+                  <div className="flex gap-2 flex-wrap">
+                    {importResult.order.map((marketplace) => (
+                      <span key={marketplace} className="rounded-full bg-gray-200 px-2 py-0.5">
+                        {BULK_IMPORT_LABELS[marketplace]}: {importResult.products[marketplace] || 0}
+                      </span>
+                    ))}
+                  </div>
+                  {importJobStatus && (
+                    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+                      {importResult.order.map((marketplace) => {
+                        const progress = importJobStatus.marketplaces[marketplace];
+                        if (!progress) return null;
+                        return (
+                          <div key={marketplace} className="border-b border-gray-100 px-3 py-3 last:border-b-0">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="font-medium text-gray-900">{BULK_IMPORT_LABELS[marketplace]}</p>
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${bulkImportStatusClass(progress.status)}`}>
+                                {BULK_IMPORT_STATUS_LABELS[progress.status]}
+                              </span>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-600">
+                              <span>Total: {progress.total}</span>
+                              <span>Procesados: {progress.processed}</span>
+                              <span>OK: {progress.success}</span>
+                              <span>Fallidos: {progress.failed}</span>
+                            </div>
+                            {progress.errors && progress.errors.length > 0 && (
+                              <details className="mt-2 rounded-md border border-red-200 bg-red-50">
+                                <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-red-700">
+                                  Errores ({progress.errors.length})
+                                </summary>
+                                <ul className="max-h-40 overflow-auto border-t border-red-200 space-y-1 px-3 py-2 text-xs text-red-700">
+                                  {progress.errors.map((error, index) => (
+                                    <li key={`${error.sku}-${index}`}>
+                                      <strong>{error.sku || '-'}</strong>: {error.reason}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </details>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
               )}
@@ -2325,7 +2363,7 @@ export const ProductList: React.FC = () => {
                 className="gap-1.5"
               >
                 <Upload className="w-4 h-4" />
-                {importDryRun ? 'Validar' : 'Importar'}
+                Importar
               </Button>
             </div>
           </div>
