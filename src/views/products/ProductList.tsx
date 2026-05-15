@@ -2272,7 +2272,7 @@ export const ProductList: React.FC = () => {
 
             <div className="flex-1 overflow-y-auto space-y-4 px-5 py-4">
               <p className="text-sm text-gray-600">
-                Carga el Excel maestro. El backend detecta las hojas disponibles y procesa cada marketplace automáticamente, en orden y sin selección manual.
+                Carga el Excel maestro y el sistema importará automáticamente la información de cada marketplace incluido en el archivo.
               </p>
 
               <div>
