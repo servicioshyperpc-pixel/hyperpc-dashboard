@@ -125,6 +125,15 @@ interface BulkPublishResponse {
   results: BulkPublishSkuResult[];
 }
 
+interface BulkUpdateResponse {
+  requested: number;
+  marketplaces: MarketplaceKey[];
+  updated: number;
+  failed: number;
+  skipped: number;
+  results: BulkPublishSkuResult[];
+}
+
 type BulkImportMarketplaceKey = 'falabella' | 'ripley' | 'paris' | 'walmart' | 'meli';
 type BulkImportStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
 type BulkUpdateField = 'stock' | 'price' | 'title' | 'description' | 'images';
@@ -969,6 +978,46 @@ export const ProductList: React.FC = () => {
     }
   };
 
+  const runBulkUpdateAction = async () => {
+    const marketplaces = Object.fromEntries(
+      bulkUpdateMarketplaces
+        .map((marketplace) => [marketplace, bulkUpdateFieldsByMarketplace[marketplace] || []])
+        .filter(([, fields]) => Array.isArray(fields) && fields.length > 0),
+    );
+
+    if (selectedSkus.length === 0 || Object.keys(marketplaces).length === 0) {
+      return;
+    }
+
+    setIsBulkSubmitting(true);
+    setBulkError(null);
+    setBulkNotice(null);
+
+    try {
+      const { data } = await axiosInstance.post<BulkUpdateResponse>(
+        '/catalog/products/bulk-update',
+        {
+          skus: selectedSkus,
+          marketplaces,
+        },
+        { timeout: 180000 },
+      );
+
+      setBulkResults(data.results || []);
+      setBulkNotice(
+        `Actualización completada: ${data.updated || 0} OK, ${data.failed || 0} fallidos, ${data.skipped || 0} omitidos`,
+      );
+      await loadCatalog();
+      if (selectedProduct) {
+        await loadProductDetail(selectedProduct.sku, selectedMarketplace);
+      }
+    } catch (error: any) {
+      setBulkError(error.response?.data?.message || error.message || 'No se pudo ejecutar la actualización masiva');
+    } finally {
+      setIsBulkSubmitting(false);
+    }
+  };
+
   const totalPages = Math.max(1, Math.ceil(catalog.total / catalog.limit || 1));
   const productsWithImage = catalog.items.filter((product) => product.hasImage).length;
   const categoryOptions = Array.from(
@@ -1580,19 +1629,10 @@ export const ProductList: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Button
-                      variant="secondary"
-                      className="gap-2"
-                      onClick={() => void runBulkAction(true, { marketplaces: bulkUpdateMarketplaces, forceUpdate: true })}
-                      disabled={isBulkSubmitting || selectedSkus.length === 0 || bulkUpdateMarketplaces.length === 0 || !hasBulkUpdateFieldsSelected}
-                    >
-                      <Search className="w-4 h-4" />
-                      Verificar
-                    </Button>
+                  <div>
                     <Button
                       className="gap-2"
-                      onClick={() => void runBulkAction(false, { marketplaces: bulkUpdateMarketplaces, forceUpdate: true })}
+                      onClick={() => void runBulkUpdateAction()}
                       disabled={isBulkSubmitting || selectedSkus.length === 0 || bulkUpdateMarketplaces.length === 0 || !hasBulkUpdateFieldsSelected}
                       isLoading={isBulkSubmitting}
                     >
@@ -1614,7 +1654,7 @@ export const ProductList: React.FC = () => {
                   <div className="rounded-2xl border border-gray-200 overflow-hidden">
                     {bulkResults.length === 0 ? (
                       <div className="px-4 py-12 text-center text-sm text-gray-500">
-                        Ejecuta una verificación o actualización para ver el detalle por SKU.
+                        Ejecuta una actualización para ver el detalle por SKU.
                       </div>
                     ) : (
                       <div className="max-h-[520px] overflow-y-auto divide-y divide-gray-200">
