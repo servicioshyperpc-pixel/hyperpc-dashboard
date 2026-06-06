@@ -210,6 +210,10 @@ const BULK_UPDATE_FIELDS_BY_MARKETPLACE: Record<MarketplaceKey, BulkUpdateField[
   walmart: ['stock', 'price', 'title', 'description'],
 };
 
+// Ocultar (sin eliminar) los botones de publicar del panel de detalle.
+// Cambiar a true para volver a mostrarlos.
+const SHOW_PUBLISH_BUTTONS = false;
+
 const bulkImportStatusClass = (status: BulkImportStatus) => {
   switch (status) {
     case 'completed':
@@ -1961,13 +1965,28 @@ export const ProductList: React.FC = () => {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Imágenes adicionales</label>
-                      <textarea
-                        value={formState.imageUrls}
-                        onChange={(e) => setFormState((current) => ({ ...current, imageUrls: e.target.value }))}
-                        rows={4}
-                        className="block w-full px-4 py-2.5 bg-white border-2 border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-gray-500/20 focus:border-gray-500"
-                        placeholder="Una URL por línea. Usa hasta 6 imágenes para PC y hasta 7 para kit/combo."
-                      />
+                      {selectedProduct.images && selectedProduct.images.length > 0 ? (
+                        <ul className="space-y-1.5 rounded-lg border-2 border-gray-200 bg-white px-4 py-3">
+                          {selectedProduct.images.map((url, index) => (
+                            <li key={`${url}-${index}`} className="flex items-center gap-2 text-sm min-w-0">
+                              <span className="shrink-0">🔗</span>
+                              <a
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title={url}
+                                className="truncate text-blue-600 hover:underline"
+                              >
+                                Imagen {index + 1} — {url}
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-400">
+                          Sin imágenes adicionales.
+                        </div>
+                      )}
                     </div>
 
                     {/* Datos del canal — colapsable */}
@@ -2265,6 +2284,7 @@ export const ProductList: React.FC = () => {
                     )}
 	                    {/* Fin datos del canal */}
 
+                    {SHOW_PUBLISH_BUTTONS && (
                     <div className="grid gap-3 sm:grid-cols-2">
                       {(() => {
                         const currentDetail = selectedProduct.marketplaceDetails[selectedMarketplace];
@@ -2302,6 +2322,7 @@ export const ProductList: React.FC = () => {
                         {isPublishing ? 'Preparando...' : 'Publicar este producto en todos los canales'}
                       </button>
                     </div>
+                    )}
 
                     {detailNotice && (
                       <div className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">{detailNotice}</div>
