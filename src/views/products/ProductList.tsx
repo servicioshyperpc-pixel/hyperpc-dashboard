@@ -1079,7 +1079,10 @@ export const ProductList: React.FC = () => {
           ) : product.hasImage ? (
             <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-1 text-[11px] font-semibold text-blue-800">Foto</span>
           ) : (
-            <ImageIcon className="w-5 h-5 text-gray-400" />
+            <div className="flex flex-col items-center justify-center gap-0.5 text-amber-500" title="Falta imagen">
+              <AlertTriangle className="w-4 h-4" />
+              <span className="text-[9px] font-semibold leading-none">Falta</span>
+            </div>
           )}
         </div>
       ),
@@ -1846,13 +1849,21 @@ export const ProductList: React.FC = () => {
                         <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-600">
                           <span className="rounded-full bg-white border border-gray-200 px-2.5 py-1">Precio: {formatCurrency(selectedProduct.price)}</span>
                           <span className="rounded-full bg-white border border-gray-200 px-2.5 py-1">Stock: {selectedProduct.stock}</span>
-                          <span className={`rounded-full px-2.5 py-1 ${selectedProduct.hasImage ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700'}`}>
-                            {selectedProduct.hasImage ? 'Con foto' : 'Sin foto'}
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 ${selectedProduct.hasImage ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>
+                            {!selectedProduct.hasImage && <AlertTriangle className="w-3 h-3" />}
+                            {selectedProduct.hasImage ? 'Con foto' : 'Falta imagen'}
                           </span>
                         </div>
                       </div>
                     </div>
                   </div>
+
+                  {!selectedProduct.hasImage && (
+                    <div className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                      <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                      <span>Este producto no tiene imágenes cargadas en Odoo. Subí una imagen o agregá las propiedades "Imagen 1", "Imagen 2"… con su URL.</span>
+                    </div>
+                  )}
 
                   {selectedProduct.attributes && selectedProduct.attributes.length > 0 && (
                     <div className="rounded-2xl border border-gray-200 bg-white p-4">
@@ -1955,13 +1966,6 @@ export const ProductList: React.FC = () => {
                         </div>
                       </div>
                     </div>
-
-                    <Input
-                      label="Imagen principal"
-                      value={formState.imageUrl}
-                      onChange={(e) => setFormState((current) => ({ ...current, imageUrl: e.target.value }))}
-                      placeholder="https://..."
-                    />
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Imágenes adicionales</label>
@@ -2332,12 +2336,14 @@ export const ProductList: React.FC = () => {
                       <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{detailError}</div>
                     )}
 
+                    {SHOW_PUBLISH_BUTTONS && (
                     <div className="flex justify-end pt-1">
                       <Button onClick={() => void handleSaveDraft()} isLoading={isSaving} className="gap-1.5 min-w-40">
                         <Pencil className="w-4 h-4" />
                         Guardar cambios
                       </Button>
                     </div>
+                    )}
                   </div>
                 </>
               )}
