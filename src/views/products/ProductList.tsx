@@ -49,6 +49,7 @@ interface CatalogProduct {
   active: boolean;
   hasImage: boolean;
   imageThumbBase64?: string | null;
+  images?: string[] | null;
   productTemplateId: number | null;
   attributes?: ProductAttribute[];
   publications: PublicationSummary[];
@@ -225,9 +226,9 @@ const bulkImportStatusClass = (status: BulkImportStatus) => {
 };
 
 const STATUS_META: Record<PublicationStatus, { label: string; variant: 'success' | 'error' | 'warning' | 'info' | 'default'; helper: string }> = {
-  missing: { label: 'Sin preparar', variant: 'default', helper: 'Todavía no hay contenido comercial para este canal.' },
-  draft: { label: 'Borrador', variant: 'warning', helper: 'Contenido guardado localmente, pendiente de publicar.' },
-  ready: { label: 'Listo', variant: 'info', helper: 'El payload ya quedó preparado por el backend para publicar.' },
+  missing: { label: 'Pendiente', variant: 'default', helper: 'Este canal todavía no está listo para publicar.' },
+  draft: { label: 'En preparación', variant: 'warning', helper: 'Información guardada, pendiente de publicar.' },
+  ready: { label: 'Listo', variant: 'info', helper: 'La información está preparada para publicar.' },
   processing: { label: 'Procesando', variant: 'info', helper: 'El marketplace está procesando la publicación de forma asíncrona.' },
   published: { label: 'Publicado', variant: 'success', helper: 'Producto publicado o actualizado en el marketplace.' },
   error: { label: 'Error', variant: 'error', helper: 'Falló la última operación en el marketplace.' },
@@ -271,7 +272,7 @@ const VALIDATION_META: Record<
   { label: string; variant: 'success' | 'error' | 'warning' | 'default'; helper: string }
 > = {
   ready: { label: 'Listo para publicar', variant: 'success', helper: 'La configuración mínima está completa.' },
-  missing_data: { label: 'Faltan datos', variant: 'error', helper: 'El canal todavía no tiene toda la configuración requerida.' },
+  missing_data: { label: 'Requiere información', variant: 'error', helper: 'Información pendiente para este canal.' },
   exists: { label: 'Ya existe', variant: 'warning', helper: 'El producto ya figura creado en el marketplace.' },
   unknown: { label: 'Sin verificar', variant: 'default', helper: 'Todavía no se evaluó este canal en forma real.' },
 };
@@ -288,61 +289,6 @@ const formatCurrency = (amount: number) =>
   }).format(amount || 0);
 
 const priceWithIva = (price: number) => Math.round((price || 0) * IVA_RATE);
-
-const ODOO_FIELD_LABELS: Record<string, string> = {
-  id: 'ID',
-  display_name: 'Nombre completo',
-  name: 'Nombre',
-  default_code: 'SKU',
-  barcode: 'Código de barras',
-  active: 'Activo',
-  sale_ok: 'Puede venderse',
-  purchase_ok: 'Puede comprarse',
-  detailed_type: 'Tipo detallado',
-  type: 'Tipo',
-  tracking: 'Trazabilidad',
-  qty_available: 'Stock físico',
-  free_qty: 'Stock disponible',
-  virtual_available: 'Stock pronosticado',
-  incoming_qty: 'Entrante',
-  outgoing_qty: 'Saliente',
-  lst_price: 'Precio venta',
-  list_price: 'Precio lista',
-  standard_price: 'Costo',
-  categ_id: 'Categoría',
-  product_tmpl_id: 'Plantilla',
-  uom_id: 'Unidad de medida',
-  uom_po_id: 'Unidad de compra',
-  weight: 'Peso',
-  volume: 'Volumen',
-  description: 'Descripción interna',
-  description_sale: 'Descripción venta',
-  description_purchase: 'Descripción compra',
-  create_date: 'Creado en Odoo',
-  write_date: 'Actualizado en Odoo',
-};
-
-const formatOdooValue = (value: any): string => {
-  if (value === null || value === undefined || value === false || value === '') return 'Sin dato';
-  if (value === true) return 'Sí';
-  if (Array.isArray(value)) return value.filter((item) => item !== false && item !== null && item !== undefined).join(' · ') || 'Sin dato';
-  if (typeof value === 'object') return JSON.stringify(value, null, 2);
-  return String(value);
-};
-
-const renderOdooField = (source: Record<string, any>, field: string) => {
-  const value = source[field];
-  const isLongText = typeof value === 'string' && value.length > 120;
-
-  return (
-    <div key={field} className={`rounded-xl border border-gray-200 bg-white p-3 ${isLongText ? 'sm:col-span-2' : ''}`}>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-400">{ODOO_FIELD_LABELS[field] || field}</p>
-      <p className={`mt-1 text-sm text-gray-800 ${isLongText ? 'whitespace-pre-wrap leading-6' : 'break-words'}`}>
-        {formatOdooValue(value)}
-      </p>
-    </div>
-  );
-};
 
 const parseLinesToAttributes = (value: string) =>
   value
@@ -370,33 +316,52 @@ const attributesToMultiline = (attributes?: Array<{ key?: string; value?: string
         .join('\n')
     : '';
 
+const parseImageUrls = (value: string) =>
+  value
+    .split(/[\n,;]+/)
+    .map((url) => url.trim())
+    .filter((url) => /^https?:\/\//i.test(url));
+
+const imageUrlsToMultiline = (...sources: any[]) => {
+  const urls: string[] = [];
+  for (const source of sources) {
+    const list = Array.isArray(source) ? source : source ? [source] : [];
+    for (const item of list) {
+      const raw = typeof item === 'string' ? item : item?.src || item?.source || item?.url || '';
+      const url = String(raw || '').trim();
+      if (/^https?:\/\//i.test(url) && !urls.includes(url)) urls.push(url);
+    }
+  }
+  return urls.join('\n');
+};
+
 const friendlyFieldName = (raw: string): string => {
   const map: Record<string, string> = {
     'title': 'Título',
     'description': 'Descripción',
     'price': 'Precio',
-    'imageUrl': 'URL de imagen',
-    'payload.configuration.familyId': 'Family ID (Paris)',
+    'imageUrl': 'Imagen',
+    'payload.configuration.familyId': 'Familia',
     'payload.configuration.category': 'Categoría',
-    'payload.configuration.categoryId': 'Categoría (MeLi)',
-    'payload.configuration.categoryCode': 'Categoría (Ripley)',
-    'payload.configuration.primaryCategory': 'Categoría principal (Falabella)',
+    'payload.configuration.categoryId': 'Categoría',
+    'payload.configuration.categoryCode': 'Categoría',
+    'payload.configuration.primaryCategory': 'Categoría principal',
     'payload.configuration.brand': 'Marca',
-    'payload.configuration.gtin': 'GTIN / Código de barras',
-    'payload.configuration.productId': 'Product ID (Falabella)',
-    'payload.configuration.operatorCode': 'Código operador',
-    'payload.configuration.listingTypeId': 'Tipo de publicación (MeLi)',
+    'payload.configuration.gtin': 'Código de barras',
+    'payload.configuration.productId': 'Código del producto',
+    'payload.configuration.operatorCode': 'Código de integración',
+    'payload.configuration.listingTypeId': 'Tipo de publicación',
     'payload.configuration.condition': 'Condición',
     'payload.configuration.currencyId': 'Moneda',
-    'payload.configuration.variantId': 'Variante ID (Ripley)',
-    'payload.configuration.leadtimeToShip': 'Tiempo de envío (Ripley)',
-    'payload.configuration.mediaName': 'Nombre media (Paris)',
-    'payload.configuration.thumbnailUrl': 'URL miniatura (Ripley)',
-    'payload.configuration.productData': 'Atributos producto (Falabella)',
-    'payload.configuration.productAttributes': 'Atributos producto (Paris)',
-    'payload.configuration.variantAttributes': 'Atributos variante (Paris)',
+    'payload.configuration.variantId': 'SKU de variante',
+    'payload.configuration.leadtimeToShip': 'Tiempo de despacho',
+    'payload.configuration.mediaName': 'Nombre de imagen',
+    'payload.configuration.thumbnailUrl': 'Imagen miniatura',
+    'payload.configuration.productData': 'Características del producto',
+    'payload.configuration.productAttributes': 'Características del producto',
+    'payload.configuration.variantAttributes': 'Características de variante',
     'payload.configuration.attributes': 'Atributos',
-    'payload.configuration.imageUrl': 'URL de imagen',
+    'payload.configuration.imageUrl': 'Imagen',
   };
   // Try exact match, then strip prefix and try, then humanize the last segment
   if (map[raw]) return map[raw];
@@ -412,6 +377,7 @@ const emptyForm = {
   price: '',
   status: 'draft' as PublicationStatus,
   imageUrl: '',
+  imageUrls: '',
   falabellaPrimaryCategory: '',
   falabellaCategories: '',
   falabellaBrand: '',
@@ -515,7 +481,7 @@ export const ProductList: React.FC = () => {
 
       setCatalog(data);
     } catch (error: any) {
-      setLoadError(error.response?.data?.message || error.message || 'No se pudo cargar el catálogo de Odoo');
+      setLoadError(error.response?.data?.message || error.message || 'No se pudo cargar el catálogo');
     } finally {
       setIsLoading(false);
     }
@@ -607,13 +573,21 @@ export const ProductList: React.FC = () => {
   const syncFormWithSelection = useCallback((product: ProductDetailResponse, marketplace: MarketplaceKey) => {
     const detail = product.marketplaceDetails[marketplace];
     const configuration = detail.payload?.configuration || {};
+    const mainImageUrl = detail.imageUrl || configuration.imageUrl || '';
 
     setFormState({
       title: detail.title || product.name,
       description: detail.description || product.description || '',
       price: detail.price !== null ? String(priceWithIva(detail.price)) : String(priceWithIva(product.price)),
       status: detail.status || 'draft',
-      imageUrl: detail.imageUrl || configuration.imageUrl || '',
+      imageUrl: mainImageUrl,
+      imageUrls: imageUrlsToMultiline(
+        configuration.images,
+        configuration.pictures,
+        configuration.medias,
+        configuration.imageUrl,
+        detail.imageUrl,
+      ),
       falabellaPrimaryCategory: String(configuration.primaryCategory || ''),
       falabellaCategories: String(configuration.categories || ''),
       falabellaBrand: String(configuration.brand || ''),
@@ -660,9 +634,7 @@ export const ProductList: React.FC = () => {
       setSelectedProduct(data);
       setSelectedMarketplace(marketplace);
       syncFormWithSelection(data, marketplace);
-
-      const missing = data.marketplaceDetails[marketplace]?.validation?.missingFields?.length || 0;
-      if (missing > 0) setShowAdvancedConfig(true);
+      setShowAdvancedConfig(false);
     } catch (error: any) {
       setDetailError(error.response?.data?.message || error.message || 'No se pudo cargar el detalle del producto');
     } finally {
@@ -768,9 +740,7 @@ export const ProductList: React.FC = () => {
 
     setSelectedMarketplace(marketplace);
     syncFormWithSelection(selectedProduct, marketplace);
-
-    const missing = selectedProduct.marketplaceDetails[marketplace]?.validation?.missingFields?.length || 0;
-    if (missing > 0) setShowAdvancedConfig(true);
+    setShowAdvancedConfig(false);
   };
 
   const handleSaveDraft = async () => {
@@ -784,6 +754,8 @@ export const ProductList: React.FC = () => {
 
     try {
       const payload: Record<string, any> = {};
+      const imageUrls = parseImageUrls(formState.imageUrls);
+      const primaryImageUrl = formState.imageUrl.trim() || imageUrls[0] || '';
 
       if (selectedMarketplace === 'falabella') {
         payload.configuration = {
@@ -795,6 +767,8 @@ export const ProductList: React.FC = () => {
           productData: Object.fromEntries(
             parseLinesToAttributes(formState.falabellaProductData).map((attribute) => [attribute.key, attribute.value]),
           ),
+          imageUrl: primaryImageUrl,
+          images: imageUrls.length ? imageUrls : primaryImageUrl ? [primaryImageUrl] : [],
         };
       }
 
@@ -804,7 +778,8 @@ export const ProductList: React.FC = () => {
           listingTypeId: formState.meliListingTypeId.trim() || 'gold_special',
           condition: formState.meliCondition.trim() || 'new',
           currencyId: formState.meliCurrencyId.trim() || 'CLP',
-          imageUrl: formState.imageUrl.trim(),
+          imageUrl: primaryImageUrl,
+          pictures: (imageUrls.length ? imageUrls : primaryImageUrl ? [primaryImageUrl] : []).map((source) => ({ source })),
           attributes: parseLinesToAttributes(formState.meliAttributes).map((attribute) => ({
             id: attribute.key,
             value_name: attribute.value,
@@ -837,9 +812,13 @@ export const ProductList: React.FC = () => {
             value: attribute.value,
           })),
           mediaName: formState.parisMediaName.trim() || formState.title.trim() || selectedProduct.name,
-          medias: formState.imageUrl.trim()
-            ? [{ position: 1, src: formState.imageUrl.trim(), name: formState.parisMediaName.trim() || formState.title.trim() || selectedProduct.name }]
-            : [],
+          imageUrl: primaryImageUrl,
+          images: imageUrls.length ? imageUrls : primaryImageUrl ? [primaryImageUrl] : [],
+          medias: (imageUrls.length ? imageUrls : primaryImageUrl ? [primaryImageUrl] : []).map((src, index) => ({
+            position: index + 1,
+            src,
+            name: formState.parisMediaName.trim() || formState.title.trim() || selectedProduct.name,
+          })),
         };
       }
 
@@ -850,7 +829,8 @@ export const ProductList: React.FC = () => {
           thumbnailUrl: formState.ripleyThumbnailUrl.trim(),
           variantId: formState.ripleyVariantId.trim() || selectedProduct.sku,
           leadtimeToShip: formState.ripleyLeadtimeToShip.trim(),
-          imageUrl: formState.imageUrl.trim(),
+          imageUrl: primaryImageUrl,
+          images: imageUrls.length ? imageUrls : primaryImageUrl ? [primaryImageUrl] : [],
           additionalAttributes: parseLinesToAttributes(formState.ripleyAttributes),
         };
       }
@@ -860,7 +840,7 @@ export const ProductList: React.FC = () => {
         description: formState.description.trim(),
         price: Math.round(Number(formState.price) / IVA_RATE),
         status: formState.status,
-        imageUrl: formState.imageUrl.trim() || undefined,
+        imageUrl: primaryImageUrl || undefined,
         payload: Object.keys(payload).length ? payload : undefined,
         existsInMarketplace: selectedProduct.marketplaceDetails[selectedMarketplace].existsInMarketplace,
       });
@@ -1084,6 +1064,14 @@ export const ProductList: React.FC = () => {
               loading="lazy"
               decoding="async"
             />
+          ) : product.images?.[0] ? (
+            <img
+              src={product.images[0]}
+              alt={product.name}
+              className="w-full h-full object-cover"
+              loading="lazy"
+              decoding="async"
+            />
           ) : product.hasImage ? (
             <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-1 text-[11px] font-semibold text-blue-800">Foto</span>
           ) : (
@@ -1098,13 +1086,12 @@ export const ProductList: React.FC = () => {
       render: (product: CatalogProduct) => (
         <div>
           <p className="font-mono text-sm font-semibold text-gray-900 underline-offset-2 group-hover:underline">{product.sku}</p>
-          <p className="text-xs text-gray-500">ID Odoo {product.id}</p>
         </div>
       ),
     },
     {
       key: 'name',
-      header: 'Catálogo Odoo',
+      header: 'Producto',
       render: (product: CatalogProduct) => (
         <div className="min-w-[260px] max-w-[340px]">
           <p className="font-medium text-gray-900 truncate underline-offset-2 group-hover:underline">{product.name}</p>
@@ -1126,7 +1113,7 @@ export const ProductList: React.FC = () => {
           onClick={() => setStockSort((prev) => prev === 'none' ? 'desc' : prev === 'desc' ? 'asc' : 'none')}
           className="inline-flex items-center gap-1 hover:text-gray-900"
         >
-          Stock Odoo
+          Stock
           {stockSort === 'desc' && <ChevronDown className="w-3 h-3" />}
           {stockSort === 'asc' && <ChevronDown className="w-3 h-3 rotate-180" />}
         </button>
@@ -1167,14 +1154,14 @@ export const ProductList: React.FC = () => {
     <div className="space-y-5 sm:space-y-6">
       <div>
         <p className="text-xs uppercase tracking-[0.18em] text-gray-500">Catálogo maestro</p>
-        <h1 className="text-xl font-bold text-gray-950 sm:text-2xl">Productos desde Odoo</h1>
+        <h1 className="text-xl font-bold text-gray-950 sm:text-2xl">Productos</h1>
       </div>
 
       <Card bodyClassName="flex flex-col xl:flex-row gap-3 xl:items-center xl:justify-between">
         <div className="flex-1 relative max-w-2xl">
           <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
           <Input
-            placeholder="Buscar por SKU o nombre base de Odoo..."
+            placeholder="Buscar por SKU o nombre..."
             value={searchQuery}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
             className="pl-10"
@@ -1183,7 +1170,7 @@ export const ProductList: React.FC = () => {
 
         <div className="flex flex-col items-stretch gap-3 text-sm text-gray-600 sm:flex-row sm:flex-wrap sm:items-center">
           <span className="rounded-full bg-gray-100 px-3 py-1.5">Productos: {catalog.total}</span>
-          <span className="rounded-full bg-blue-100 px-3 py-1.5 text-blue-800">Con foto Odoo: {productsWithImage}</span>
+          <span className="rounded-full bg-blue-100 px-3 py-1.5 text-blue-800">Con foto: {productsWithImage}</span>
           <span className="rounded-full bg-amber-100 px-3 py-1.5 text-amber-800">Seleccionados: {selectedSkus.length}</span>
           <Button
             variant="secondary"
@@ -1327,7 +1314,7 @@ export const ProductList: React.FC = () => {
         {loadError ? (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{loadError}</div>
         ) : isLoading ? (
-          <div className="py-12 text-center text-sm text-gray-500">Cargando catálogo de Odoo...</div>
+          <div className="py-12 text-center text-sm text-gray-500">Cargando productos...</div>
         ) : (
           <>
             <Table
@@ -1391,7 +1378,7 @@ export const ProductList: React.FC = () => {
                         ? 'publicar/actualizar TODOS los SKUs (incluye los que ya existen).'
                         : 'solo publicar los que no existan ya en el canal (los existentes se saltan).'}
                     </p>
-                    <p><span className="font-semibold text-gray-950">Lote:</span> el backend procesa por tandas para no saturar los marketplaces.</p>
+                    <p><span className="font-semibold text-gray-950">Lote:</span> el sistema procesa por tandas para no saturar los marketplaces.</p>
                   </div>
 
                   <div>
@@ -1466,7 +1453,7 @@ export const ProductList: React.FC = () => {
                 <div className="min-h-[320px] space-y-4">
                   <div className="rounded-2xl border border-gray-200 bg-white p-4">
                     <p className="text-sm font-semibold text-gray-950">Resultado</p>
-                    <p className="mt-1 text-xs text-gray-500">El backend valida que el SKU exista en Odoo, revisa si el canal ya figura como existente y solo procesa los que estén listos.</p>
+                    <p className="mt-1 text-xs text-gray-500">El sistema valida cada SKU, revisa si el canal ya lo tiene publicado y solo procesa los que estén listos.</p>
                   </div>
 
                   {bulkNotice && <div className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">{bulkNotice}</div>}
@@ -1561,7 +1548,7 @@ export const ProductList: React.FC = () => {
                 <div className="space-y-5">
                   <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700 space-y-2">
                     <p><span className="font-semibold text-gray-950">SKU seleccionados:</span> {selectedSkus.length}</p>
-                    <p><span className="font-semibold text-gray-950">Modo:</span> elige por marketplace qué datos quieres actualizar desde Odoo.</p>
+                    <p><span className="font-semibold text-gray-950">Modo:</span> elige por marketplace qué datos quieres actualizar en cada canal.</p>
                   </div>
 
                   <div>
@@ -1814,7 +1801,7 @@ export const ProductList: React.FC = () => {
             <div className="flex-1 overflow-y-auto p-4 space-y-5 sm:p-6">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.18em] text-gray-500">Odoo</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-gray-500">Producto</p>
                   <h2 className="text-lg font-semibold text-gray-950">Detalle del producto</h2>
                 </div>
                 <button
@@ -1843,6 +1830,8 @@ export const ProductList: React.FC = () => {
                       <div className="w-20 h-20 rounded-2xl bg-white border border-gray-200 flex items-center justify-center overflow-hidden">
                         {selectedProduct.imageBase64 ? (
                           <img src={`data:image/png;base64,${selectedProduct.imageBase64}`} alt={selectedProduct.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
+                        ) : selectedProduct.images?.[0] ? (
+                          <img src={selectedProduct.images[0]} alt={selectedProduct.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
                         ) : (
                           <ImageIcon className="w-7 h-7 text-gray-400" />
                         )}
@@ -1854,80 +1843,12 @@ export const ProductList: React.FC = () => {
                           <span className="rounded-full bg-white border border-gray-200 px-2.5 py-1">Precio: {formatCurrency(selectedProduct.price)}</span>
                           <span className="rounded-full bg-white border border-gray-200 px-2.5 py-1">Stock: {selectedProduct.stock}</span>
                           <span className={`rounded-full px-2.5 py-1 ${selectedProduct.hasImage ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700'}`}>
-                            {selectedProduct.hasImage ? 'Odoo trae foto' : 'Sin foto en Odoo'}
+                            {selectedProduct.hasImage ? 'Con foto' : 'Sin foto'}
                           </span>
                         </div>
                       </div>
                     </div>
                   </div>
-
-                  {selectedProduct.odooDetails?.product && (
-                    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-                      <div className="mb-3 flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-xs uppercase tracking-[0.18em] text-gray-500">Campos de Odoo</p>
-                          <p className="text-sm text-gray-600">Información directa de la variante del producto.</p>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        {[
-                          'display_name',
-                          'default_code',
-                          'barcode',
-                          'categ_id',
-                          'active',
-                          'sale_ok',
-                          'purchase_ok',
-                          'detailed_type',
-                          'type',
-                          'tracking',
-                          'qty_available',
-                          'free_qty',
-                          'virtual_available',
-                          'incoming_qty',
-                          'outgoing_qty',
-                          'lst_price',
-                          'standard_price',
-                          'uom_id',
-                          'uom_po_id',
-                          'weight',
-                          'volume',
-                          'description_sale',
-                          'description',
-                          'description_purchase',
-                          'create_date',
-                          'write_date',
-                        ]
-                          .filter((field) => Object.prototype.hasOwnProperty.call(selectedProduct.odooDetails?.product || {}, field))
-                          .map((field) => renderOdooField(selectedProduct.odooDetails!.product!, field))}
-                      </div>
-                    </div>
-                  )}
-
-                  {selectedProduct.odooDetails?.template && (
-                    <div className="rounded-2xl border border-gray-200 bg-white p-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-gray-500 mb-3">Plantilla Odoo</p>
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        {[
-                          'display_name',
-                          'default_code',
-                          'barcode',
-                          'categ_id',
-                          'list_price',
-                          'standard_price',
-                          'uom_id',
-                          'uom_po_id',
-                          'weight',
-                          'volume',
-                          'description_sale',
-                          'description',
-                          'description_purchase',
-                        ]
-                          .filter((field) => Object.prototype.hasOwnProperty.call(selectedProduct.odooDetails?.template || {}, field))
-                          .map((field) => renderOdooField(selectedProduct.odooDetails!.template!, field))}
-                      </div>
-                    </div>
-                  )}
 
                   {selectedProduct.attributes && selectedProduct.attributes.length > 0 && (
                     <div className="rounded-2xl border border-gray-200 bg-white p-4">
@@ -1950,7 +1871,7 @@ export const ProductList: React.FC = () => {
                         const status = getEffectiveStatusMeta(detail);
                         const validation = VALIDATION_META[detail.validation?.status || 'unknown'];
                         const isSelected = selectedMarketplace === marketplace;
-                        const actionLabel = detail.existsInMarketplace || detail.externalProductId ? 'Editar' : 'Crear';
+                        const actionLabel = detail.existsInMarketplace || detail.externalProductId ? 'Publicado en canal' : 'Pendiente de publicación';
 
                         return (
                           <button
@@ -1965,7 +1886,7 @@ export const ProductList: React.FC = () => {
                               <Badge variant={isSelected ? 'default' : status.variant}>{status.label}</Badge>
                             </div>
                             <div className={`mt-2 space-y-1 text-xs ${isSelected ? 'text-gray-300' : 'text-gray-500'}`}>
-                              <p>{actionLabel} contenido comercial</p>
+                              <p>{actionLabel}</p>
                               <p>{validation.label}</p>
                             </div>
                           </button>
@@ -1980,8 +1901,8 @@ export const ProductList: React.FC = () => {
                         <p className="text-sm font-semibold text-gray-950">{MARKETPLACE_LABELS[selectedMarketplace]}</p>
                         <p className="text-xs text-gray-500">
                           {selectedProduct.marketplaceDetails[selectedMarketplace].existsInMarketplace
-                            ? 'Producto publicado — edita los datos y guarda para actualizar'
-                            : 'Completa los datos y publica en este canal'}
+                            ? 'Producto publicado en este canal'
+                            : 'Revisa la información y publica cuando esté listo'}
                         </p>
                       </div>
                       <Badge variant={getEffectiveStatusMeta(selectedProduct.marketplaceDetails[selectedMarketplace]).variant}>
@@ -1989,18 +1910,11 @@ export const ProductList: React.FC = () => {
                       </Badge>
                     </div>
 
-                    {/* Warning si faltan campos obligatorios */}
+                    {/* Aviso simple para el usuario final; el detalle queda en Datos del canal. */}
                     {selectedProduct.marketplaceDetails[selectedMarketplace].validation?.missingFields?.length ? (
                       <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-                        <p className="text-sm font-medium text-amber-800">Faltan campos para publicar:</p>
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {selectedProduct.marketplaceDetails[selectedMarketplace].validation!.missingFields.map((field) => (
-                            <span key={field} className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700">
-                              {friendlyFieldName(field)}
-                            </span>
-                          ))}
-                        </div>
-                        <p className="text-xs text-amber-600 mt-2">Abre &quot;Configuración avanzada&quot; para completarlos.</p>
+                        <p className="text-sm font-medium text-amber-800">Este canal requiere información adicional antes de publicar.</p>
+                        <p className="text-xs text-amber-600 mt-2">Abre &quot;Datos del canal&quot; para completar la información requerida.</p>
                       </div>
                     ) : null}
 
@@ -2030,7 +1944,7 @@ export const ProductList: React.FC = () => {
                         </div>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Stock Odoo</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Stock</label>
                         <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-2 border-gray-200 rounded-lg text-gray-900">
                           <span className="font-semibold">{selectedProduct.stock}</span>
                           <span className="text-xs text-gray-500">unidades</span>
@@ -2039,13 +1953,24 @@ export const ProductList: React.FC = () => {
                     </div>
 
                     <Input
-                      label="Imagen URL"
+                      label="Imagen principal"
                       value={formState.imageUrl}
                       onChange={(e) => setFormState((current) => ({ ...current, imageUrl: e.target.value }))}
                       placeholder="https://..."
                     />
 
-                    {/* Configuracion avanzada — colapsable */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Imágenes adicionales</label>
+                      <textarea
+                        value={formState.imageUrls}
+                        onChange={(e) => setFormState((current) => ({ ...current, imageUrls: e.target.value }))}
+                        rows={4}
+                        className="block w-full px-4 py-2.5 bg-white border-2 border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-gray-500/20 focus:border-gray-500"
+                        placeholder="Una URL por línea. Usa hasta 6 imágenes para PC y hasta 7 para kit/combo."
+                      />
+                    </div>
+
+                    {/* Datos del canal — colapsable */}
                     <button
                       type="button"
                       onClick={() => setShowAdvancedConfig((v) => !v)}
@@ -2053,7 +1978,7 @@ export const ProductList: React.FC = () => {
                     >
                       <span className="flex items-center gap-2">
                         <Settings className="h-4 w-4" />
-                        Configuración avanzada del canal
+                        Datos del canal
                       </span>
                       <ChevronDown className={`h-4 w-4 transition-transform ${showAdvancedConfig ? 'rotate-180' : ''}`} />
                     </button>
@@ -2063,12 +1988,12 @@ export const ProductList: React.FC = () => {
                     {selectedMarketplace === 'falabella' && (
                       <div className="space-y-4 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
                         <div>
-                          <p className="text-sm font-semibold text-gray-950">Configuración Falabella</p>
-                          <p className="text-xs text-gray-600 mt-1">Falabella exige categoría primaria y estructura de producto antes de publicar.</p>
+	                          <p className="text-sm font-semibold text-gray-950">Datos para Falabella</p>
+	                          <p className="text-xs text-gray-600 mt-1">Completa la información requerida por este canal.</p>
                         </div>
 
                         <Input
-                          label="Primary Category"
+	                          label="Categoría principal"
                           value={formState.falabellaPrimaryCategory}
                           onChange={(e) => setFormState((current) => ({ ...current, falabellaPrimaryCategory: e.target.value }))}
                           placeholder="4"
@@ -2089,21 +2014,21 @@ export const ProductList: React.FC = () => {
                         />
 
                         <Input
-                          label="Product ID"
+	                          label="Código del producto"
                           value={formState.falabellaProductId}
                           onChange={(e) => setFormState((current) => ({ ...current, falabellaProductId: e.target.value }))}
                           placeholder="xyzabc"
                         />
 
                         <Input
-                          label="Operator Code"
+	                          label="Código de integración"
                           value={formState.falabellaOperatorCode}
                           onChange={(e) => setFormState((current) => ({ ...current, falabellaOperatorCode: e.target.value }))}
                           placeholder="facl"
                         />
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Datos de producto</label>
+	                          <label className="block text-sm font-medium text-gray-700 mb-1">Características del producto</label>
                           <textarea
                             value={formState.falabellaProductData}
                             onChange={(e) => setFormState((current) => ({ ...current, falabellaProductData: e.target.value }))}
@@ -2118,33 +2043,33 @@ export const ProductList: React.FC = () => {
                     {selectedMarketplace === 'mercadolibre' && (
                       <div className="space-y-4 rounded-2xl border border-yellow-100 bg-yellow-50/70 p-4">
                         <div>
-                          <p className="text-sm font-semibold text-gray-950">Configuración MercadoLibre</p>
-                          <p className="text-xs text-gray-600 mt-1">MercadoLibre exige categoría, listing type e imagen para crear el item.</p>
+	                          <p className="text-sm font-semibold text-gray-950">Datos para MercadoLibre</p>
+	                          <p className="text-xs text-gray-600 mt-1">Completa la información requerida por este canal.</p>
                         </div>
 
                         <Input
-                          label="Category ID"
+	                          label="Categoría"
                           value={formState.meliCategoryId}
                           onChange={(e) => setFormState((current) => ({ ...current, meliCategoryId: e.target.value }))}
                           placeholder="MLC1648"
                         />
 
                         <Input
-                          label="Listing Type ID"
+	                          label="Tipo de publicación"
                           value={formState.meliListingTypeId}
                           onChange={(e) => setFormState((current) => ({ ...current, meliListingTypeId: e.target.value }))}
                           placeholder="gold_special"
                         />
 
                         <Input
-                          label="Condition"
+	                          label="Condición"
                           value={formState.meliCondition}
                           onChange={(e) => setFormState((current) => ({ ...current, meliCondition: e.target.value }))}
                           placeholder="new"
                         />
 
                         <Input
-                          label="Currency ID"
+	                          label="Moneda"
                           value={formState.meliCurrencyId}
                           onChange={(e) => setFormState((current) => ({ ...current, meliCurrencyId: e.target.value }))}
                           placeholder="CLP"
@@ -2166,12 +2091,12 @@ export const ProductList: React.FC = () => {
                     {selectedMarketplace === 'walmart' && (
                       <div className="space-y-4 rounded-2xl border border-cyan-100 bg-cyan-50/70 p-4">
                         <div>
-                          <p className="text-sm font-semibold text-gray-950">Configuración Walmart</p>
-                          <p className="text-xs text-gray-600 mt-1">Walmart exige GTIN/EAN y categoría para poder crear el item.</p>
+	                          <p className="text-sm font-semibold text-gray-950">Datos para Walmart</p>
+	                          <p className="text-xs text-gray-600 mt-1">Completa la información requerida por este canal.</p>
                         </div>
 
                         <Input
-                          label="Category"
+	                          label="Categoría"
                           value={formState.walmartCategory}
                           onChange={(e) => setFormState((current) => ({ ...current, walmartCategory: e.target.value }))}
                           placeholder="Tecnologia"
@@ -2185,7 +2110,7 @@ export const ProductList: React.FC = () => {
                         />
 
                         <Input
-                          label="GTIN / EAN"
+	                          label="Código de barras"
                           value={formState.walmartGtin}
                           onChange={(e) => setFormState((current) => ({ ...current, walmartGtin: e.target.value }))}
                           placeholder="7801234567890"
@@ -2207,19 +2132,19 @@ export const ProductList: React.FC = () => {
                     {selectedMarketplace === 'paris' && (
                       <div className="space-y-4 rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
                         <div>
-                          <p className="text-sm font-semibold text-gray-950">Configuración Paris</p>
-                          <p className="text-xs text-gray-600 mt-1">Paris exige familia, categoría y atributos. Si falta esa base, el publish queda en error.</p>
+	                          <p className="text-sm font-semibold text-gray-950">Datos para Paris</p>
+	                          <p className="text-xs text-gray-600 mt-1">Completa la información requerida por este canal.</p>
                         </div>
 
                         <Input
-                          label="Family ID"
+	                          label="Familia"
                           value={formState.parisFamilyId}
                           onChange={(e) => setFormState((current) => ({ ...current, parisFamilyId: e.target.value }))}
                           placeholder="computacion"
                         />
 
                         <Input
-                          label="Category"
+	                          label="Categoría"
                           value={formState.parisCategory}
                           onChange={(e) => setFormState((current) => ({ ...current, parisCategory: e.target.value }))}
                           placeholder="notebooks"
@@ -2266,8 +2191,8 @@ export const ProductList: React.FC = () => {
                     {selectedMarketplace === 'ripley' && (
                       <div className="space-y-4 rounded-2xl border border-amber-100 bg-amber-50/70 p-4">
                         <div>
-                          <p className="text-sm font-semibold text-gray-950">Configuración Ripley</p>
-                          <p className="text-xs text-gray-600 mt-1">Ripley publica por importación CSV. Aquí completas los datos que el backend convertirá al archivo de carga.</p>
+	                          <p className="text-sm font-semibold text-gray-950">Datos para Ripley</p>
+	                          <p className="text-xs text-gray-600 mt-1">Completa la información requerida por este canal.</p>
                         </div>
 
                         <Input
@@ -2285,21 +2210,21 @@ export const ProductList: React.FC = () => {
                         />
 
                         <Input
-                          label="Thumbnail URL"
+	                          label="Imagen miniatura"
                           value={formState.ripleyThumbnailUrl}
                           onChange={(e) => setFormState((current) => ({ ...current, ripleyThumbnailUrl: e.target.value }))}
                           placeholder="https://..."
                         />
 
                         <Input
-                          label="Variant ID"
+	                          label="SKU de variante"
                           value={formState.ripleyVariantId}
                           onChange={(e) => setFormState((current) => ({ ...current, ripleyVariantId: e.target.value }))}
                           placeholder={selectedProduct.sku}
                         />
 
                         <Input
-                          label="Lead time to ship"
+	                          label="Tiempo de despacho"
                           value={formState.ripleyLeadtimeToShip}
                           onChange={(e) => setFormState((current) => ({ ...current, ripleyLeadtimeToShip: e.target.value }))}
                           placeholder="24hrs"
@@ -2319,7 +2244,7 @@ export const ProductList: React.FC = () => {
                     )}
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Estado local</label>
+	                      <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
                       <select
                         value={formState.status}
                         onChange={(e) => setFormState((current) => ({ ...current, status: e.target.value as PublicationStatus }))}
@@ -2333,12 +2258,12 @@ export const ProductList: React.FC = () => {
 
                     {selectedProduct.marketplaceDetails[selectedMarketplace].externalProductId && (
                       <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
-                        External ID: {selectedProduct.marketplaceDetails[selectedMarketplace].externalProductId}
+	                        Código en marketplace: {selectedProduct.marketplaceDetails[selectedMarketplace].externalProductId}
                       </div>
                     )}
                     </>
                     )}
-                    {/* Fin configuracion avanzada */}
+	                    {/* Fin datos del canal */}
 
                     <div className="grid gap-3 sm:grid-cols-2">
                       {(() => {
