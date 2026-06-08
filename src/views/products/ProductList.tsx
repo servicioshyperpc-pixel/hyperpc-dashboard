@@ -1164,6 +1164,7 @@ export const ProductList: React.FC = () => {
         <h1 className="text-xl font-bold text-gray-950 sm:text-2xl">Productos</h1>
       </div>
 
+      <div className="sticky top-[60px] sm:top-[76px] z-10 -mx-3 sm:-mx-6 lg:-mx-8 px-3 sm:px-6 lg:px-8 py-3 space-y-4 border-b border-black/5 bg-[#f6f3ee]/95 backdrop-blur-md">
       <Card bodyClassName="flex flex-col xl:flex-row gap-3 xl:items-center xl:justify-between">
         <div className="flex-1 relative max-w-2xl">
           <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
@@ -1310,6 +1311,7 @@ export const ProductList: React.FC = () => {
           <RefreshCw className={`w-3.5 h-3.5 ${isFalabellaCatalogSyncing ? 'animate-spin' : ''}`} />
           {isFalabellaCatalogSyncing ? 'Sincronizando Falabella...' : 'Sincronizar catálogo Falabella'}
         </button>
+      </div>
       </div>
       {syncNotice && (
         <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700">
