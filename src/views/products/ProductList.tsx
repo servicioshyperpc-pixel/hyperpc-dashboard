@@ -217,6 +217,19 @@ const SHOW_PUBLISH_BUTTONS = false;
 // Ocultar (sin eliminar) el botón "Crear masivo". Cambiar a true para mostrarlo.
 const SHOW_CREAR_MASIVO = false;
 
+// Convierte HTML a texto plano. El cliente quiere la descripción de MercadoLibre
+// en texto plano; el resto de los canales la muestran en HTML.
+const stripHtml = (value: string) =>
+  String(value || '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p\s*>/gi, '\n')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n\s+/g, '\n')
+    .trim();
+
 const bulkImportStatusClass = (status: BulkImportStatus) => {
   switch (status) {
     case 'completed':
@@ -584,7 +597,10 @@ export const ProductList: React.FC = () => {
 
     setFormState({
       title: detail.title || product.name,
-      description: detail.description || product.description || '',
+      // MeLi → texto plano; resto de canales → HTML (descripción real de Odoo).
+      description: marketplace === 'mercadolibre'
+        ? stripHtml(product.description || detail.description || '')
+        : product.description || detail.description || '',
       price: detail.price !== null ? String(priceWithIva(detail.price)) : String(priceWithIva(product.price)),
       status: detail.status || 'draft',
       imageUrl: mainImageUrl,
