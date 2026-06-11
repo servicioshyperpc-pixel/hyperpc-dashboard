@@ -214,6 +214,9 @@ const BULK_UPDATE_FIELDS_BY_MARKETPLACE: Record<MarketplaceKey, BulkUpdateField[
 // Cambiar a true para volver a mostrarlos.
 const SHOW_PUBLISH_BUTTONS = false;
 
+// Ocultar (sin eliminar) el botón "Crear masivo". Cambiar a true para mostrarlo.
+const SHOW_CREAR_MASIVO = false;
+
 const bulkImportStatusClass = (status: BulkImportStatus) => {
   switch (status) {
     case 'completed':
@@ -1180,6 +1183,7 @@ export const ProductList: React.FC = () => {
           <span className="rounded-full bg-gray-100 px-3 py-1.5">Productos: {catalog.total}</span>
           <span className="rounded-full bg-blue-100 px-3 py-1.5 text-blue-800">Con foto: {productsWithImage}</span>
           <span className="rounded-full bg-amber-100 px-3 py-1.5 text-amber-800">Seleccionados: {selectedSkus.length}</span>
+          {SHOW_CREAR_MASIVO && (
           <Button
             variant="secondary"
             className="gap-2"
@@ -1194,6 +1198,7 @@ export const ProductList: React.FC = () => {
             <Rocket className="w-4 h-4" />
             Crear masivo
           </Button>
+          )}
           <Button
             variant="secondary"
             className="gap-2"
