@@ -469,6 +469,7 @@ export const ProductList: React.FC = () => {
   const [isFalabellaCatalogSyncing, setIsFalabellaCatalogSyncing] = useState(false);
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
   const [isBulkUpdateModalOpen, setIsBulkUpdateModalOpen] = useState(false);
+  const [isBulkStatusRefreshing, setIsBulkStatusRefreshing] = useState(false);
   const [bulkUpdateMarketplaces, setBulkUpdateMarketplaces] = useState<MarketplaceKey[]>(MARKETPLACES);
   const [expandedBulkUpdateMarketplaces, setExpandedBulkUpdateMarketplaces] = useState<MarketplaceKey[]>(['falabella']);
   const [bulkUpdateFieldsByMarketplace, setBulkUpdateFieldsByMarketplace] = useState<Record<MarketplaceKey, BulkUpdateField[]>>(
@@ -549,6 +550,43 @@ export const ProductList: React.FC = () => {
       setSyncNotice('No se pudo completar la sincronización ligera de marketplaces.');
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  // Capa 2: al abrir el modal de actualización masiva, refrescar en vivo el
+  // estado de publicación de los SKUs seleccionados (chequeo contra la API real
+  // vía /marketplace-sync/status) para no trabajar sobre data vieja del cache.
+  // Best-effort y en segundo plano: si falla, el modal igual abre.
+  const refreshSelectedMarketplaceStatus = async (skus: string[]) => {
+    const uniqueSkus = Array.from(new Set(skus)).slice(0, MARKETPLACE_STATUS_SYNC_LIMIT);
+    if (uniqueSkus.length === 0) return;
+    setIsBulkStatusRefreshing(true);
+    try {
+      const { data } = await axiosInstance.post<Record<string, Record<string, { exists: boolean; externalId: string | null }>>>('/marketplace-sync/status', { skus: uniqueSkus });
+
+      setCatalog((prev) => ({
+        ...prev,
+        items: prev.items.map((item) => {
+          if (!data[item.sku]) return item;
+          return {
+            ...item,
+            publications: item.publications.map((pub) => {
+              const syncResult = data[item.sku]?.[pub.marketplace];
+              if (!syncResult) return pub;
+              return {
+                ...pub,
+                existsInMarketplace: syncResult.exists,
+                externalProductId: syncResult.externalId,
+                lastSyncedAt: new Date().toISOString(),
+              };
+            }),
+          };
+        }),
+      }));
+    } catch (error) {
+      console.error('Error refreshing selected marketplace status:', error);
+    } finally {
+      setIsBulkStatusRefreshing(false);
     }
   };
 
@@ -1224,6 +1262,7 @@ export const ProductList: React.FC = () => {
               setBulkNotice(null);
               setBulkError(null);
               setIsBulkUpdateModalOpen(true);
+              void refreshSelectedMarketplaceStatus(selectedSkus);
             }}
           >
             <Upload className="w-4 h-4" />
@@ -1566,6 +1605,9 @@ export const ProductList: React.FC = () => {
                 <div>
                   <p className="text-xs uppercase tracking-[0.18em] text-gray-500">Actualización masiva</p>
                   <h2 className="text-lg font-semibold text-gray-950">Actualizar productos en marketplaces</h2>
+                  {isBulkStatusRefreshing && (
+                    <p className="mt-1 text-xs text-gray-500">Verificando estado real en los marketplaces…</p>
+                  )}
                 </div>
                 <button
                   onClick={() => setIsBulkUpdateModalOpen(false)}
