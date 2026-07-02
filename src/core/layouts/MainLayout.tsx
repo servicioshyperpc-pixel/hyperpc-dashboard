@@ -81,11 +81,6 @@ export function MainLayout({ children }: MainLayoutProps) {
     }).length;
   }, [logs]);
 
-  const getPageTitle = () => {
-    const item = menuItems.find((entry) => entry.path === location.pathname);
-    return item?.label || 'Dashboard';
-  };
-
   const closeSidebar = () => setSidebarOpen(false);
 
   return (
@@ -171,10 +166,9 @@ export function MainLayout({ children }: MainLayoutProps) {
               <Menu className="w-5 h-5" />
             </button>
 
-            <div className="min-w-0 flex-1">
-              <p className="text-xs uppercase tracking-[0.18em] text-gray-500">HyperPC Dashboard</p>
-              <h2 className="truncate text-lg font-bold text-gray-950 sm:text-xl">{getPageTitle()}</h2>
-            </div>
+            {/* El título del módulo ya lo muestra cada vista con su propio encabezado;
+                aquí solo dejamos el espaciador para empujar las acciones a la derecha. */}
+            <div className="min-w-0 flex-1" />
 
             <button
               onClick={() => navigate('/errors')}

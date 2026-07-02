@@ -206,7 +206,7 @@ const BULK_UPDATE_FIELDS_BY_MARKETPLACE: Record<MarketplaceKey, BulkUpdateField[
   falabella: ['stock', 'price', 'title', 'description', 'images'],
   mercadolibre: ['stock', 'price', 'images'],
   ripley: ['stock', 'price', 'title', 'description', 'images'],
-  paris: ['stock', 'price', 'title', 'images'],
+  paris: ['stock', 'price', 'title', 'description', 'images'],
   walmart: ['stock', 'price', 'title', 'description'],
 };
 
@@ -389,6 +389,28 @@ const friendlyFieldName = (raw: string): string => {
   if (map[stripped]) return map[stripped];
   // Humanize: camelCase → "Camel Case"
   return stripped.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase());
+};
+
+// Traduce los status crudos que devuelve el backend (bulk-update / bulk-create)
+// a una etiqueta legible en español con el color correcto. Cubre tanto el estado
+// por SKU como el estado por canal. 'processing' (Ripley async) se muestra como
+// éxito porque la publicación fue aceptada y quedó en moderación.
+const resultStatusMeta = (
+  raw: string,
+): { label: string; variant: 'success' | 'error' | 'warning' | 'info' | 'default' } => {
+  const key = String(raw || '').toLowerCase();
+  const map: Record<string, { label: string; variant: 'success' | 'error' | 'warning' | 'info' | 'default' }> = {
+    updated: { label: 'Actualizado', variant: 'success' },
+    created: { label: 'Creado', variant: 'success' },
+    published: { label: 'Publicado', variant: 'success' },
+    processing: { label: 'En proceso', variant: 'info' },
+    partial: { label: 'Parcial', variant: 'warning' },
+    skipped: { label: 'Omitido', variant: 'warning' },
+    skipped_existing: { label: 'Ya existía', variant: 'warning' },
+    error: { label: 'Error', variant: 'error' },
+    failed: { label: 'Error', variant: 'error' },
+  };
+  return map[key] || { label: raw || 'Sin estado', variant: 'default' };
 };
 
 const emptyForm = {
@@ -1183,7 +1205,7 @@ export const ProductList: React.FC = () => {
         <h1 className="text-xl font-bold text-gray-950 sm:text-2xl">Productos</h1>
       </div>
 
-      <div className="sticky top-[60px] sm:top-[76px] z-10 -mx-3 sm:-mx-6 lg:-mx-8 px-3 sm:px-6 lg:px-8 py-3 space-y-4 border-b border-black/5 bg-[#f6f3ee]/95 backdrop-blur-md">
+      <div className="sticky top-[52px] sm:top-[60px] z-10 -mx-3 sm:-mx-6 lg:-mx-8 px-3 sm:px-6 lg:px-8 py-3 space-y-4 border-b border-black/5 bg-[#f6f3ee]/95 backdrop-blur-md">
       <Card bodyClassName="flex flex-col xl:flex-row gap-3 xl:items-center xl:justify-between">
         <div className="flex-1 relative max-w-2xl">
           <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
@@ -1503,7 +1525,7 @@ export const ProductList: React.FC = () => {
                                 <p className="font-mono text-sm font-semibold text-gray-950">{result.sku}</p>
                                 <p className="text-xs text-gray-500">{result.message}</p>
                               </div>
-                              <Badge variant={result.status === 'error' ? 'error' : result.status === 'partial' ? 'warning' : 'success'}>{result.status}</Badge>
+                              <Badge variant={resultStatusMeta(result.status).variant}>{resultStatusMeta(result.status).label}</Badge>
                             </div>
                             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                               {result.marketplaces.map((entry) => {
@@ -1512,7 +1534,7 @@ export const ProductList: React.FC = () => {
                                   <div key={`${result.sku}-${entry.marketplace}`} className="min-w-0 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
                                     <div className="flex items-center justify-between gap-2">
                                       <span className="truncate text-sm font-medium text-gray-900">{MARKETPLACE_LABELS[entry.marketplace]}</span>
-                                      <Badge variant={entry.status === 'error' ? 'error' : entry.status === 'skipped_existing' ? 'warning' : 'info'}>{entry.status}</Badge>
+                                      <Badge variant={resultStatusMeta(entry.status).variant}>{resultStatusMeta(entry.status).label}</Badge>
                                     </div>
                                     {missing.length > 0 ? (
                                       <div className="mt-2 space-y-1.5">
@@ -1682,7 +1704,7 @@ export const ProductList: React.FC = () => {
                                 <p className="font-mono text-sm font-semibold text-gray-950">{result.sku}</p>
                                 <p className="text-xs text-gray-500">{result.message}</p>
                               </div>
-                              <Badge variant={result.status === 'error' ? 'error' : result.status === 'partial' ? 'warning' : 'success'}>{result.status}</Badge>
+                              <Badge variant={resultStatusMeta(result.status).variant}>{resultStatusMeta(result.status).label}</Badge>
                             </div>
                             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                               {result.marketplaces.map((entry) => {
@@ -1691,7 +1713,7 @@ export const ProductList: React.FC = () => {
                                   <div key={`${result.sku}-${entry.marketplace}`} className="min-w-0 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
                                     <div className="flex items-center justify-between gap-2">
                                       <span className="truncate text-sm font-medium text-gray-900">{MARKETPLACE_LABELS[entry.marketplace]}</span>
-                                      <Badge variant={entry.status === 'error' ? 'error' : entry.status === 'skipped_existing' ? 'warning' : 'info'}>{entry.status}</Badge>
+                                      <Badge variant={resultStatusMeta(entry.status).variant}>{resultStatusMeta(entry.status).label}</Badge>
                                     </div>
                                     {missing.length > 0 ? (
                                       <div className="mt-2 space-y-1.5">
@@ -1855,52 +1877,8 @@ export const ProductList: React.FC = () => {
 
               {selectedProduct && !isDetailLoading && (
                 <>
-                  <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-                      <div className="w-20 h-20 rounded-2xl bg-white border border-gray-200 flex items-center justify-center overflow-hidden">
-                        {selectedProduct.imageBase64 ? (
-                          <img src={`data:image/png;base64,${selectedProduct.imageBase64}`} alt={selectedProduct.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
-                        ) : selectedProduct.images?.[0] ? (
-                          <img src={selectedProduct.images[0]} alt={selectedProduct.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
-                        ) : (
-                          <ImageIcon className="w-7 h-7 text-gray-400" />
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-semibold text-gray-950">{selectedProduct.name}</p>
-                        <p className="text-sm text-gray-500 mt-1">{selectedProduct.sku} · {selectedProduct.category || 'Sin categoría'}</p>
-                        <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-600">
-                          <span className="rounded-full bg-white border border-gray-200 px-2.5 py-1">Precio: {formatCurrency(selectedProduct.price)}</span>
-                          <span className="rounded-full bg-white border border-gray-200 px-2.5 py-1">Stock: {selectedProduct.stock}</span>
-                          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 ${selectedProduct.hasImage ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>
-                            {!selectedProduct.hasImage && <AlertTriangle className="w-3 h-3" />}
-                            {selectedProduct.hasImage ? 'Con foto' : 'Falta imagen'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {!selectedProduct.hasImage && (
-                    <div className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                      <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-                      <span>Este producto no tiene imágenes cargadas en Odoo. Subí una imagen o agregá las propiedades "Imagen 1", "Imagen 2"… con su URL.</span>
-                    </div>
-                  )}
-
-                  {selectedProduct.attributes && selectedProduct.attributes.length > 0 && (
-                    <div className="rounded-2xl border border-gray-200 bg-white p-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-gray-500 mb-3">Atributos del producto</p>
-                      <div className="flex flex-wrap gap-2">
-                        {selectedProduct.attributes.map((attr) => (
-                          <span key={attr.attribute} className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-700">
-                            <span className="font-semibold">{attr.attribute}:</span> {attr.values.join(', ')}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
+                  {/* CANALES primero: es lo que el operador viene a gestionar.
+                      Los datos de Odoo (resumen, atributos) se muestran al final. */}
                   <div>
                     <p className="text-xs uppercase tracking-[0.18em] text-gray-500 mb-3">Canales</p>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -2368,6 +2346,54 @@ export const ProductList: React.FC = () => {
                     </div>
                     )}
                   </div>
+
+                  {/* Datos de Odoo (referencia) — al final del panel. */}
+                  <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-gray-500 mb-3">Datos de Odoo</p>
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                      <div className="w-20 h-20 rounded-2xl bg-white border border-gray-200 flex items-center justify-center overflow-hidden">
+                        {selectedProduct.imageBase64 ? (
+                          <img src={`data:image/png;base64,${selectedProduct.imageBase64}`} alt={selectedProduct.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
+                        ) : selectedProduct.images?.[0] ? (
+                          <img src={selectedProduct.images[0]} alt={selectedProduct.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
+                        ) : (
+                          <ImageIcon className="w-7 h-7 text-gray-400" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-gray-950">{selectedProduct.name}</p>
+                        <p className="text-sm text-gray-500 mt-1">{selectedProduct.sku} · {selectedProduct.category || 'Sin categoría'}</p>
+                        <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-600">
+                          <span className="rounded-full bg-white border border-gray-200 px-2.5 py-1">Precio: {formatCurrency(selectedProduct.price)}</span>
+                          <span className="rounded-full bg-white border border-gray-200 px-2.5 py-1">Stock: {selectedProduct.stock}</span>
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 ${selectedProduct.hasImage ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>
+                            {!selectedProduct.hasImage && <AlertTriangle className="w-3 h-3" />}
+                            {selectedProduct.hasImage ? 'Con foto' : 'Falta imagen'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {!selectedProduct.hasImage && (
+                    <div className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                      <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                      <span>Este producto no tiene imágenes cargadas en Odoo. Subí una imagen o agregá las propiedades "Imagen 1", "Imagen 2"… con su URL.</span>
+                    </div>
+                  )}
+
+                  {selectedProduct.attributes && selectedProduct.attributes.length > 0 && (
+                    <div className="rounded-2xl border border-gray-200 bg-white p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-gray-500 mb-3">Atributos del producto</p>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedProduct.attributes.map((attr) => (
+                          <span key={attr.attribute} className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-700">
+                            <span className="font-semibold">{attr.attribute}:</span> {attr.values.join(', ')}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </div>
