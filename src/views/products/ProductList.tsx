@@ -503,6 +503,7 @@ export const ProductList: React.FC = () => {
   const [importResult, setImportResult] = useState<BulkImportUploadResponse | null>(null);
   const [importJobStatus, setImportJobStatus] = useState<BulkImportStatusResponse | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [importMarketplaces, setImportMarketplaces] = useState<BulkImportMarketplaceKey[]>(['falabella', 'ripley', 'paris', 'walmart', 'meli']);
 
   const loadCatalog = useCallback(async () => {
     setIsLoading(true);
@@ -724,7 +725,7 @@ export const ProductList: React.FC = () => {
   }, [selectedMarketplace, syncFormWithSelection]);
 
   const handleImportExcel = useCallback(async () => {
-    if (!importFile) return;
+    if (!importFile || importMarketplaces.length === 0) return;
     setIsImporting(true);
     setImportError(null);
     setImportResult(null);
@@ -732,6 +733,7 @@ export const ProductList: React.FC = () => {
     try {
       const form = new FormData();
       form.append('file', importFile);
+      form.append('marketplaces', JSON.stringify(importMarketplaces));
       const { data } = await axiosInstance.post<BulkImportUploadResponse>(
         '/bulk-import/upload',
         form,
@@ -765,6 +767,7 @@ export const ProductList: React.FC = () => {
     }
   }, [
     importFile,
+    importMarketplaces,
   ]);
 
   useEffect(() => {
@@ -2482,6 +2485,33 @@ export const ProductList: React.FC = () => {
                 />
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Marketplaces a importar
+                </label>
+                <p className="text-xs text-gray-600 mb-2">Selecciona solo los que quieres cargar. Útil si el Excel tiene múltiples hojas pero solo quieres subir algunas.</p>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {(['falabella', 'ripley', 'paris', 'walmart', 'meli'] as BulkImportMarketplaceKey[]).map((marketplace) => (
+                    <label key={marketplace} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={importMarketplaces.includes(marketplace)}
+                        onChange={() => {
+                          setImportMarketplaces((prev) =>
+                            prev.includes(marketplace)
+                              ? prev.filter((m) => m !== marketplace)
+                              : [...prev, marketplace]
+                          );
+                        }}
+                        disabled={isImporting}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      <span className="text-sm text-gray-700">{BULK_IMPORT_LABELS[marketplace]}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
               {importError && (
                 <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
                   {importError}
@@ -2552,12 +2582,12 @@ export const ProductList: React.FC = () => {
               </Button>
               <Button
                 onClick={() => void handleImportExcel()}
-                disabled={!importFile || isImporting}
+                disabled={!importFile || isImporting || importMarketplaces.length === 0}
                 isLoading={isImporting}
                 className="gap-1.5"
               >
                 <Upload className="w-4 h-4" />
-                Importar
+                Importar ({importMarketplaces.length})
               </Button>
             </div>
           </div>
