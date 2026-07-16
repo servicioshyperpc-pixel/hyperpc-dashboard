@@ -203,11 +203,11 @@ const BULK_UPDATE_FIELD_LABELS: Record<BulkUpdateField, string> = {
 };
 
 const BULK_UPDATE_FIELDS_BY_MARKETPLACE: Record<MarketplaceKey, BulkUpdateField[]> = {
-  falabella: ['stock', 'price', 'title', 'description', 'images'],
-  mercadolibre: ['stock', 'price', 'images'],
-  ripley: ['stock', 'price', 'title', 'description', 'images'],
-  paris: ['stock', 'price', 'title', 'description', 'images'],
-  walmart: ['stock', 'price', 'title', 'description'],
+  falabella: ['price', 'description', 'images'],
+  mercadolibre: ['price', 'images'],
+  ripley: ['price', 'title', 'description', 'images'],
+  paris: ['price', 'description', 'images'],
+  walmart: ['price', 'description'],
 };
 
 // Ocultar (sin eliminar) los botones de publicar del panel de detalle.
@@ -297,7 +297,6 @@ const VALIDATION_META: Record<
   unknown: { label: 'Sin verificar', variant: 'default', helper: 'Todavía no se evaluó este canal en forma real.' },
 };
 
-const IVA_RATE = 1.19;
 const CATALOG_PAGE_SIZE = 100;
 const MARKETPLACE_STATUS_SYNC_LIMIT = 20;
 
@@ -307,8 +306,6 @@ const formatCurrency = (amount: number) =>
     currency: 'CLP',
     minimumFractionDigits: 0,
   }).format(amount || 0);
-
-const priceWithIva = (price: number) => Math.round((price || 0) * IVA_RATE);
 
 const parseLinesToAttributes = (value: string) =>
   value
@@ -494,6 +491,7 @@ export const ProductList: React.FC = () => {
   const [isBulkStatusRefreshing, setIsBulkStatusRefreshing] = useState(false);
   const [bulkUpdateMarketplaces, setBulkUpdateMarketplaces] = useState<MarketplaceKey[]>(MARKETPLACES);
   const [expandedBulkUpdateMarketplaces, setExpandedBulkUpdateMarketplaces] = useState<MarketplaceKey[]>(['falabella']);
+  const [bulkUpdateDefaultFields, setBulkUpdateDefaultFields] = useState<BulkUpdateField[]>(['price', 'description', 'images']);
   const [bulkUpdateFieldsByMarketplace, setBulkUpdateFieldsByMarketplace] = useState<Record<MarketplaceKey, BulkUpdateField[]>>(
     () => Object.fromEntries(
       MARKETPLACES.map((marketplace) => [marketplace, BULK_UPDATE_FIELDS_BY_MARKETPLACE[marketplace]]),
@@ -661,7 +659,7 @@ export const ProductList: React.FC = () => {
       description: marketplace === 'mercadolibre'
         ? stripHtml(product.description || detail.description || '')
         : product.description || detail.description || '',
-      price: detail.price !== null ? String(priceWithIva(detail.price)) : String(priceWithIva(product.price)),
+      price: detail.price !== null ? String(Math.round(detail.price)) : String(Math.round(product.price)),
       status: detail.status || 'draft',
       imageUrl: mainImageUrl,
       imageUrls: imageUrlsToMultiline(
@@ -921,7 +919,7 @@ export const ProductList: React.FC = () => {
       await axiosInstance.put(`/catalog/products/${selectedProduct.sku}/marketplaces/${selectedMarketplace}`, {
         title: formState.title.trim(),
         description: formState.description.trim(),
-        price: Math.round(Number(formState.price) / IVA_RATE),
+        price: Math.round(Number(formState.price)),
         status: formState.status,
         imageUrl: primaryImageUrl || undefined,
         payload: Object.keys(payload).length ? payload : undefined,
@@ -988,16 +986,6 @@ export const ProductList: React.FC = () => {
     );
   };
 
-  const toggleBulkUpdateField = (marketplace: MarketplaceKey, field: BulkUpdateField) => {
-    setBulkUpdateFieldsByMarketplace((current) => {
-      const currentFields = current[marketplace] || [];
-      const nextFields = currentFields.includes(field)
-        ? currentFields.filter((item) => item !== field)
-        : [...currentFields, field];
-      return { ...current, [marketplace]: nextFields };
-    });
-  };
-
   const runBulkAction = async (dryRun: boolean, options?: { skus?: string[]; marketplaces?: MarketplaceKey[]; forceUpdate?: boolean }) => {
     const targetSkus = options?.skus?.length ? options.skus : selectedSkus;
     const targetMarketplaces = options?.marketplaces?.length ? options.marketplaces : bulkMarketplaces;
@@ -1042,13 +1030,19 @@ export const ProductList: React.FC = () => {
   };
 
   const runBulkUpdateAction = async () => {
+    if (selectedSkus.length === 0 || bulkUpdateMarketplaces.length === 0 || bulkUpdateDefaultFields.length === 0) {
+      return;
+    }
+
     const marketplaces = Object.fromEntries(
-      bulkUpdateMarketplaces
-        .map((marketplace) => [marketplace, bulkUpdateFieldsByMarketplace[marketplace] || []])
-        .filter(([, fields]) => Array.isArray(fields) && fields.length > 0),
+      bulkUpdateMarketplaces.map((marketplace) => [
+        marketplace,
+        bulkUpdateDefaultFields.filter((field) => BULK_UPDATE_FIELDS_BY_MARKETPLACE[marketplace].includes(field)),
+      ]).filter(([, fields]) => fields.length > 0),
     );
 
-    if (selectedSkus.length === 0 || Object.keys(marketplaces).length === 0) {
+    if (Object.keys(marketplaces).length === 0) {
+      setBulkError('Selecciona datos a actualizar que sean válidos para los canales escogidos');
       return;
     }
 
@@ -1103,9 +1097,7 @@ export const ProductList: React.FC = () => {
     unpublished: catalog.items.filter((p) => getProductGlobalStatus(p) === 'unpublished').length,
     error: catalog.items.filter((p) => getProductGlobalStatus(p) === 'error').length,
   };
-  const hasBulkUpdateFieldsSelected = bulkUpdateMarketplaces.some(
-    (marketplace) => (bulkUpdateFieldsByMarketplace[marketplace] || []).length > 0,
-  );
+  const hasBulkUpdateFieldsSelected = bulkUpdateDefaultFields.length > 0;
 
   const columns = [
     {
@@ -1187,9 +1179,9 @@ export const ProductList: React.FC = () => {
     },
     {
       key: 'priceIva',
-      header: 'Precio + IVA',
+      header: 'Precio de Venta',
       align: 'right' as const,
-      render: (product: CatalogProduct) => <span className="font-medium text-green-700">{formatCurrency(priceWithIva(product.price))}</span>,
+      render: (product: CatalogProduct) => <span className="font-medium text-green-700">{formatCurrency(product.price)}</span>,
     },
     {
       key: 'stock',
@@ -1258,7 +1250,21 @@ export const ProductList: React.FC = () => {
         <div className="flex flex-col items-stretch gap-3 text-sm text-gray-600 sm:flex-row sm:flex-wrap sm:items-center">
           <span className="rounded-full bg-gray-100 px-3 py-1.5">Productos: {catalog.total}</span>
           <span className="rounded-full bg-blue-100 px-3 py-1.5 text-blue-800">Con foto: {productsWithImage}</span>
-          <span className="rounded-full bg-amber-100 px-3 py-1.5 text-amber-800">Seleccionados: {selectedSkus.length}</span>
+          <button
+            onClick={() => {
+              if (selectedSkus.length > 0) {
+                setMarketplaceFilter('all');
+                setStatusFilter('all');
+                setCategoryFilter('all');
+                setStockFilter('all');
+                setSearchQuery('');
+              }
+            }}
+            className="rounded-full bg-amber-100 px-3 py-1.5 text-amber-800 cursor-pointer hover:bg-amber-200 transition-colors"
+            title={selectedSkus.length > 0 ? 'Haz clic para limpiar filtros y ver seleccionados' : ''}
+          >
+            Seleccionados: {selectedSkus.length}
+          </button>
           {SHOW_CREAR_MASIVO && (
           <Button
             variant="secondary"
@@ -1642,7 +1648,32 @@ export const ProductList: React.FC = () => {
                 <div className="space-y-5">
                   <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700 space-y-2">
                     <p><span className="font-semibold text-gray-950">SKU seleccionados:</span> {selectedSkus.length}</p>
-                    <p><span className="font-semibold text-gray-950">Modo:</span> elige por marketplace qué datos quieres actualizar en cada canal.</p>
+                    <p><span className="font-semibold text-gray-950">Nota:</span> Solo se pueden actualizar Descripción, Precio e Imágenes. El stock se sincroniza automáticamente desde Odoo.</p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-semibold text-gray-950 mb-3">Datos a actualizar</p>
+                    <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
+                      {['description', 'price', 'images'].map((field) => (
+                        <label
+                          key={field}
+                          className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={bulkUpdateDefaultFields.includes(field as BulkUpdateField)}
+                            onChange={() => {
+                              const f = field as BulkUpdateField;
+                              setBulkUpdateDefaultFields(prev =>
+                                prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]
+                              );
+                            }}
+                            className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-500"
+                          />
+                          <span className="text-sm text-gray-700">{BULK_UPDATE_FIELD_LABELS[field as BulkUpdateField]}</span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
 
                   <div>
@@ -1652,7 +1683,6 @@ export const ProductList: React.FC = () => {
                         const checked = bulkUpdateMarketplaces.includes(marketplace);
                         const expanded = expandedBulkUpdateMarketplaces.includes(marketplace);
                         const selectedFields = bulkUpdateFieldsByMarketplace[marketplace] || [];
-                        const availableFields = BULK_UPDATE_FIELDS_BY_MARKETPLACE[marketplace];
                         return (
                           <div key={marketplace} className="rounded-xl border border-gray-200 bg-white">
                             <div className="flex items-center justify-between gap-3 px-3 py-2.5">
@@ -1680,30 +1710,6 @@ export const ProductList: React.FC = () => {
                                 className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-500"
                               />
                             </div>
-                            {expanded && (
-                              <div className="border-t border-gray-100 px-3 py-3">
-                                <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-gray-500">Datos a actualizar</p>
-                                <div className="grid grid-cols-2 gap-2">
-                                  {availableFields.map((field) => (
-                                    <label
-                                      key={`${marketplace}-${field}`}
-                                      className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 text-sm ${
-                                        checked ? 'cursor-pointer border-gray-200 hover:border-gray-300' : 'cursor-not-allowed border-gray-100 bg-gray-50 text-gray-400'
-                                      }`}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={selectedFields.includes(field)}
-                                        disabled={!checked}
-                                        onChange={() => toggleBulkUpdateField(marketplace, field)}
-                                        className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-500 disabled:opacity-50"
-                                      />
-                                      <span>{BULK_UPDATE_FIELD_LABELS[field]}</span>
-                                    </label>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
                           </div>
                         );
                       })}
@@ -1996,7 +2002,7 @@ export const ProductList: React.FC = () => {
 
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Precio + IVA</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Precio de Venta</label>
                         <div className="flex items-center gap-2 px-4 py-2.5 bg-green-50 border-2 border-green-200 rounded-lg text-green-700">
                           <span className="font-semibold">{formState.price ? `$${Math.round(Number(formState.price)).toLocaleString('es-CL')}` : '-'}</span>
                         </div>
