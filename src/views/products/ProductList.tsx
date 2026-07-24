@@ -469,6 +469,7 @@ export const ProductList: React.FC = () => {
   const [formState, setFormState] = useState(emptyForm);
   const [selectedSkus, setSelectedSkus] = useState<string[]>([]);
   const [isSelectedPanelOpen, setIsSelectedPanelOpen] = useState(false);
+  const [isRetryingImages, setIsRetryingImages] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [bulkMarketplaces, setBulkMarketplaces] = useState<MarketplaceKey[]>(MARKETPLACES);
   const [bulkBatchSize, setBulkBatchSize] = useState(50);
@@ -724,6 +725,37 @@ export const ProductList: React.FC = () => {
       setIsDetailLoading(false);
     }
   }, [selectedMarketplace, syncFormWithSelection]);
+
+  // Reintenta subir SOLO las imágenes de un SKU en un marketplace (cuando
+  // quedaron pendientes por timeout del hosting). Usa el bulk-update async.
+  const retryPendingImages = async (sku: string, marketplace: MarketplaceKey) => {
+    setIsRetryingImages(true);
+    setDetailError(null);
+    setDetailNotice(null);
+    try {
+      const { data: queued } = await axiosInstance.post<{ jobId: string }>(
+        '/catalog/products/bulk-update',
+        { skus: [sku], marketplaces: { [marketplace]: ['images'] } },
+        { timeout: 30000 },
+      );
+      const jobId = queued.jobId;
+      // Polling hasta completar
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 2500));
+        const { data: status } = await axiosInstance.get<{ status: string }>(
+          `/catalog/products/bulk-update/${jobId}/status`,
+          { timeout: 30000 },
+        );
+        if (status.status === 'completed' || status.status === 'failed') break;
+      }
+      setDetailNotice('Reintento de imágenes ejecutado. Revisa el estado en unos minutos.');
+      await loadProductDetail(sku, marketplace);
+    } catch (error: any) {
+      setDetailError(error.response?.data?.message || error.message || 'No se pudo reintentar las imágenes');
+    } finally {
+      setIsRetryingImages(false);
+    }
+  };
 
   const handleImportExcel = useCallback(async () => {
     if (!importFile || importMarketplaces.length === 0) return;
@@ -2060,6 +2092,32 @@ export const ProductList: React.FC = () => {
                         </div>
                       )}
                     </div>
+
+                    {/* Aviso de imágenes pendientes en MeLi (timeout del hosting) */}
+                    {(() => {
+                      const pending = (selectedProduct.marketplaceDetails[selectedMarketplace]?.payload as any)?.pendingImages;
+                      if (!Array.isArray(pending) || pending.length === 0) return null;
+                      return (
+                        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 space-y-2">
+                          <p className="text-sm font-medium text-amber-800">
+                            ⚠️ {pending.length} {pending.length === 1 ? 'imagen no cargó' : 'imágenes no cargaron'} en {MARKETPLACE_LABELS[selectedMarketplace]}
+                          </p>
+                          <p className="text-xs text-amber-700">
+                            El marketplace agotó el tiempo al descargarlas desde el hosting. Puedes reintentar; si persiste, conviene revisar el hosting de las imágenes.
+                          </p>
+                          <Button
+                            variant="secondary"
+                            className="gap-2"
+                            disabled={isRetryingImages}
+                            isLoading={isRetryingImages}
+                            onClick={() => void retryPendingImages(selectedProduct.sku, selectedMarketplace)}
+                          >
+                            <RefreshCw className="w-4 h-4" />
+                            Reintentar imágenes
+                          </Button>
+                        </div>
+                      );
+                    })()}
 
                     {/* Datos del canal — colapsable */}
                     <button
