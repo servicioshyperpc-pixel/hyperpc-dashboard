@@ -1052,25 +1052,45 @@ export const ProductList: React.FC = () => {
     setIsBulkSubmitting(true);
     setBulkError(null);
     setBulkNotice(null);
+    setBulkResults([]);
 
     try {
-      const { data } = await axiosInstance.post<BulkUpdateResponse>(
+      // Encolar el job (respuesta inmediata con jobId) y luego hacer polling.
+      // Evita el timeout HTTP cuando hay muchos SKUs: el backend procesa en background.
+      const { data: queued } = await axiosInstance.post<{ jobId: string; requested: number }>(
         '/catalog/products/bulk-update',
-        {
-          skus: selectedSkus,
-          marketplaces,
-        },
-        { timeout: 180000 },
+        { skus: selectedSkus, marketplaces },
+        { timeout: 30000 },
       );
 
-      setBulkResults(data.results || []);
-      setBulkNotice(
-        `Actualización completada: ${data.updated || 0} OK, ${data.failed || 0} fallidos, ${data.skipped || 0} omitidos`,
-      );
-      await loadCatalog();
-      if (selectedProduct) {
-        await loadProductDetail(selectedProduct.sku, selectedMarketplace);
-      }
+      const jobId = queued.jobId;
+      setBulkNotice(`Actualización en proceso (0/${queued.requested})…`);
+
+      // Polling del estado hasta completar
+      const poll = async (): Promise<void> => {
+        const { data: status } = await axiosInstance.get<BulkUpdateResponse & {
+          status: string; total: number; processed: number;
+        }>(`/catalog/products/bulk-update/${jobId}/status`, { timeout: 30000 });
+
+        setBulkResults(status.results || []);
+
+        if (status.status === 'completed' || status.status === 'failed') {
+          setBulkNotice(
+            `Actualización completada: ${status.updated || 0} OK, ${status.failed || 0} fallidos, ${status.skipped || 0} omitidos`,
+          );
+          await loadCatalog();
+          if (selectedProduct) {
+            await loadProductDetail(selectedProduct.sku, selectedMarketplace);
+          }
+          return;
+        }
+
+        setBulkNotice(`Actualización en proceso (${status.processed || 0}/${status.total || queued.requested})…`);
+        await new Promise((r) => setTimeout(r, 2000));
+        return poll();
+      };
+
+      await poll();
     } catch (error: any) {
       setBulkError(error.response?.data?.message || error.message || 'No se pudo ejecutar la actualización masiva');
     } finally {
