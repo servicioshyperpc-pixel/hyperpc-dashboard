@@ -204,7 +204,7 @@ const BULK_UPDATE_FIELD_LABELS: Record<BulkUpdateField, string> = {
 
 const BULK_UPDATE_FIELDS_BY_MARKETPLACE: Record<MarketplaceKey, BulkUpdateField[]> = {
   falabella: ['price', 'description', 'images'],
-  mercadolibre: ['price', 'images'],
+  mercadolibre: ['price', 'description', 'images'],
   ripley: ['price', 'title', 'description', 'images'],
   paris: ['price', 'description', 'images'],
   walmart: ['price', 'description'],
