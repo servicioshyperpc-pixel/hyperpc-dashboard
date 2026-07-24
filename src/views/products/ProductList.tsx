@@ -468,6 +468,7 @@ export const ProductList: React.FC = () => {
   const [detailNotice, setDetailNotice] = useState<string | null>(null);
   const [formState, setFormState] = useState(emptyForm);
   const [selectedSkus, setSelectedSkus] = useState<string[]>([]);
+  const [isSelectedPanelOpen, setIsSelectedPanelOpen] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [bulkMarketplaces, setBulkMarketplaces] = useState<MarketplaceKey[]>(MARKETPLACES);
   const [bulkBatchSize, setBulkBatchSize] = useState(50);
@@ -1275,16 +1276,11 @@ export const ProductList: React.FC = () => {
           <span className="rounded-full bg-blue-100 px-3 py-1.5 text-blue-800">Con foto: {productsWithImage}</span>
           <button
             onClick={() => {
-              if (selectedSkus.length > 0) {
-                setMarketplaceFilter('all');
-                setStatusFilter('all');
-                setCategoryFilter('all');
-                setStockFilter('all');
-                setSearchQuery('');
-              }
+              if (selectedSkus.length > 0) setIsSelectedPanelOpen(true);
             }}
-            className="rounded-full bg-amber-100 px-3 py-1.5 text-amber-800 cursor-pointer hover:bg-amber-200 transition-colors"
-            title={selectedSkus.length > 0 ? 'Haz clic para limpiar filtros y ver seleccionados' : ''}
+            disabled={selectedSkus.length === 0}
+            className="rounded-full bg-amber-100 px-3 py-1.5 text-amber-800 cursor-pointer hover:bg-amber-200 transition-colors disabled:cursor-default disabled:opacity-70"
+            title={selectedSkus.length > 0 ? 'Ver y gestionar los SKUs seleccionados' : 'No hay SKUs seleccionados'}
           >
             Seleccionados: {selectedSkus.length}
           </button>
@@ -2609,6 +2605,69 @@ export const ProductList: React.FC = () => {
                 <Upload className="w-4 h-4" />
                 Importar ({importMarketplaces.length})
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Panel: SKUs seleccionados (de todas las páginas) */}
+      {isSelectedPanelOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setIsSelectedPanelOpen(false)}>
+          <div className="flex w-full max-w-lg max-h-[80vh] flex-col rounded-xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-950">SKUs seleccionados</h2>
+                <p className="text-xs text-gray-500">{selectedSkus.length} en total (de todas las páginas)</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSelectedPanelOpen(false)}
+                className="text-gray-500 hover:text-gray-900"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-3">
+              {selectedSkus.length === 0 ? (
+                <p className="py-8 text-center text-sm text-gray-500">No hay SKUs seleccionados.</p>
+              ) : (
+                <ul className="divide-y divide-gray-100">
+                  {selectedSkus.map((sku) => {
+                    const item = catalog.items.find((p) => p.sku === sku);
+                    return (
+                      <li key={sku} className="flex items-center justify-between gap-3 py-2">
+                        <div className="min-w-0">
+                          <p className="font-mono text-sm font-medium text-gray-900">{sku}</p>
+                          {item && <p className="truncate text-xs text-gray-500">{item.name}</p>}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedSkus((current) => current.filter((s) => s !== sku))}
+                          className="shrink-0 rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                          title="Quitar de la selección"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            <div className="flex justify-between gap-2 border-t border-gray-200 px-5 py-3">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setSelectedSkus([]);
+                  setIsSelectedPanelOpen(false);
+                }}
+                disabled={selectedSkus.length === 0}
+              >
+                Limpiar todo
+              </Button>
+              <Button onClick={() => setIsSelectedPanelOpen(false)}>Cerrar</Button>
             </div>
           </div>
         </div>
