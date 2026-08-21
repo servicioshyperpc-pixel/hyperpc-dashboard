@@ -33,17 +33,24 @@ export function Table<T extends Record<string, any>>({
     right: 'text-right',
   };
 
-  // overflow-x-auto crearía un contenedor de scroll propio y el sticky del
-  // thead dejaría de funcionar (se pegaría al div, no al viewport). Con
-  // overflow-x-clip la tabla sigue recortada horizontalmente pero el sticky
-  // vertical se resuelve contra la página.
+  // overflow-x-auto por si solo crea un contenedor de scroll en AMBOS ejes y
+  // el sticky del thead se pegaria a ese div (quedando inerte). Con
+  // overflow-y-visible el eje vertical deja de recortarse, asi el sticky se
+  // resuelve contra la pagina y el scroll lateral se conserva.
   return (
-    <div className={`overflow-x-clip ${className}`}>
+    <div className={`overflow-x-auto overflow-y-visible ${className}`}>
       <table className="min-w-full divide-y divide-gray-200">
         {/* Header pegajoso: acompaña el scroll de la lista. El offset coincide
             con la barra de filtros (top-[52px] sm:top-[60px]) para que quede
             justo debajo y no se solapen. */}
-        <thead className="sticky top-[52px] sm:top-[60px] z-20 bg-gray-50 shadow-[0_1px_0_0_rgba(0,0,0,0.08)]">
+        {/* Se pega bajo las barras ya fijas de la pagina. El offset viene de
+            --table-sticky-top (lo define la vista segun la altura real de sus
+            barras); si no esta, cae al header del layout. z-10 lo deja POR
+            DEBAJO de esas barras para que no las tape al hacer scroll. */}
+        <thead
+          className="sticky z-10 bg-gray-50 shadow-[0_1px_0_0_rgba(0,0,0,0.08)]"
+          style={{ top: 'var(--table-sticky-top, 52px)' }}
+        >
           <tr>
             {columns.map((column) => (
               <th

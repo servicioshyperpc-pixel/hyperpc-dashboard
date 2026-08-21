@@ -157,7 +157,7 @@ export function MainLayout({ children }: MainLayoutProps) {
       </aside>
 
       <main className="lg:ml-72 min-h-screen">
-        <header className="sticky top-0 z-10 border-b border-black/5 bg-[#f6f3ee]/90 backdrop-blur-md">
+        <header className="sticky top-0 z-30 border-b border-black/5 bg-[#f6f3ee]/90 backdrop-blur-md">
           <div className="px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex items-center justify-between gap-3">
             <button
               onClick={() => setSidebarOpen(true)}

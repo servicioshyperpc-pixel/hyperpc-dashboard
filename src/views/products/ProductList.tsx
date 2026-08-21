@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Card } from '../../core/components/Card.tsx';
 import { Table } from '../../core/components/Table.tsx';
 import { Badge } from '../../core/components/Badge.tsx';
@@ -468,6 +468,28 @@ export const ProductList: React.FC = () => {
   const [detailNotice, setDetailNotice] = useState<string | null>(null);
   const [formState, setFormState] = useState(emptyForm);
   const [selectedSkus, setSelectedSkus] = useState<string[]>([]);
+  // La barra de filtros es sticky y de alto variable (el buscador y los chips
+  // envuelven segun el ancho). Se mide en vivo y se publica como
+  // --table-sticky-top para que el header de la tabla se pegue justo debajo
+  // en vez de solaparse con ella.
+  const filtersBarRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = filtersBarRef.current;
+    if (!el) return;
+    const apply = () => {
+      const top = el.getBoundingClientRect().height + el.offsetTop;
+      document.documentElement.style.setProperty('--table-sticky-top', `${Math.round(top)}px`);
+    };
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    window.addEventListener('resize', apply);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', apply);
+      document.documentElement.style.removeProperty('--table-sticky-top');
+    };
+  }, []);
   const [isSelectedPanelOpen, setIsSelectedPanelOpen] = useState(false);
   const [isRetryingImages, setIsRetryingImages] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
@@ -491,7 +513,10 @@ export const ProductList: React.FC = () => {
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
   const [isBulkUpdateModalOpen, setIsBulkUpdateModalOpen] = useState(false);
   const [isBulkStatusRefreshing, setIsBulkStatusRefreshing] = useState(false);
-  const [bulkUpdateMarketplaces, setBulkUpdateMarketplaces] = useState<MarketplaceKey[]>(MARKETPLACES);
+  // Sin canales preseleccionados: igual que los campos, el usuario elige
+  // explicitamente a donde actualizar. Antes venian los 5 marcados y una
+  // actualizacion sin revisar el panel tocaba todos los marketplaces.
+  const [bulkUpdateMarketplaces, setBulkUpdateMarketplaces] = useState<MarketplaceKey[]>([]);
   const [expandedBulkUpdateMarketplaces, setExpandedBulkUpdateMarketplaces] = useState<MarketplaceKey[]>(['falabella']);
   // Sin campos preseleccionados: el usuario elige explícitamente qué actualizar.
   // Antes venían marcados price/description/images y se actualizaba de más sin
@@ -1294,7 +1319,7 @@ export const ProductList: React.FC = () => {
         <h1 className="text-xl font-bold text-gray-950 sm:text-2xl">Productos</h1>
       </div>
 
-      <div className="sticky top-[52px] sm:top-[60px] z-10 -mx-3 sm:-mx-6 lg:-mx-8 px-3 sm:px-6 lg:px-8 py-3 space-y-4 border-b border-black/5 bg-[#f6f3ee]/95 backdrop-blur-md">
+      <div ref={filtersBarRef} className="sticky top-[52px] sm:top-[60px] z-20 -mx-3 sm:-mx-6 lg:-mx-8 px-3 sm:px-6 lg:px-8 py-3 space-y-4 border-b border-black/5 bg-[#f6f3ee]/95 backdrop-blur-md">
       <Card bodyClassName="flex flex-col xl:flex-row gap-3 xl:items-center xl:justify-between">
         <div className="flex-1 relative max-w-2xl">
           <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
