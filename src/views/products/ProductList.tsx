@@ -493,10 +493,13 @@ export const ProductList: React.FC = () => {
   const [isBulkStatusRefreshing, setIsBulkStatusRefreshing] = useState(false);
   const [bulkUpdateMarketplaces, setBulkUpdateMarketplaces] = useState<MarketplaceKey[]>(MARKETPLACES);
   const [expandedBulkUpdateMarketplaces, setExpandedBulkUpdateMarketplaces] = useState<MarketplaceKey[]>(['falabella']);
-  const [bulkUpdateDefaultFields, setBulkUpdateDefaultFields] = useState<BulkUpdateField[]>(['price', 'description', 'images']);
+  // Sin campos preseleccionados: el usuario elige explícitamente qué actualizar.
+  // Antes venían marcados price/description/images y se actualizaba de más sin
+  // que nadie lo hubiera pedido.
+  const [bulkUpdateDefaultFields, setBulkUpdateDefaultFields] = useState<BulkUpdateField[]>([]);
   const [bulkUpdateFieldsByMarketplace, setBulkUpdateFieldsByMarketplace] = useState<Record<MarketplaceKey, BulkUpdateField[]>>(
     () => Object.fromEntries(
-      MARKETPLACES.map((marketplace) => [marketplace, BULK_UPDATE_FIELDS_BY_MARKETPLACE[marketplace]]),
+      MARKETPLACES.map((marketplace) => [marketplace, [] as BulkUpdateField[]]),
     ) as Record<MarketplaceKey, BulkUpdateField[]>,
   );
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -1469,7 +1472,7 @@ export const ProductList: React.FC = () => {
               columns={columns}
               data={filteredItems}
               emptyMessage="No hay productos para este filtro"
-              className="pb-3 overflow-x-scroll"
+              className="pb-3"
               rowClassName="group"
               onRowClick={(product) => void loadProductDetail(product.sku)}
             />

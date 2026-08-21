@@ -33,10 +33,17 @@ export function Table<T extends Record<string, any>>({
     right: 'text-right',
   };
 
+  // overflow-x-auto crearía un contenedor de scroll propio y el sticky del
+  // thead dejaría de funcionar (se pegaría al div, no al viewport). Con
+  // overflow-x-clip la tabla sigue recortada horizontalmente pero el sticky
+  // vertical se resuelve contra la página.
   return (
-    <div className={`overflow-x-auto ${className}`}>
+    <div className={`overflow-x-clip ${className}`}>
       <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
+        {/* Header pegajoso: acompaña el scroll de la lista. El offset coincide
+            con la barra de filtros (top-[52px] sm:top-[60px]) para que quede
+            justo debajo y no se solapen. */}
+        <thead className="sticky top-[52px] sm:top-[60px] z-20 bg-gray-50 shadow-[0_1px_0_0_rgba(0,0,0,0.08)]">
           <tr>
             {columns.map((column) => (
               <th
