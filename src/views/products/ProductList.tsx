@@ -477,7 +477,11 @@ export const ProductList: React.FC = () => {
     const el = filtersBarRef.current;
     if (!el) return;
     const apply = () => {
-      const top = el.getBoundingClientRect().height + el.offsetTop;
+      // La barra ya es sticky en top-[52px]/[60px]; su offset final es ese
+      // valor + su propia altura. NO usar offsetTop: es la posicion dentro del
+      // documento (cientos de px) y empujaba el header fuera de la vista.
+      const barTop = window.matchMedia('(min-width: 640px)').matches ? 60 : 52;
+      const top = barTop + el.getBoundingClientRect().height;
       document.documentElement.style.setProperty('--table-sticky-top', `${Math.round(top)}px`);
     };
     apply();
